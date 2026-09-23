@@ -354,7 +354,7 @@ function getAuthRedirectUrl(){
   return origin && origin !== 'null' ? origin + path : window.location.href.split('#')[0];
 }
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' }
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' }
 });
 
 /* =========================================================
@@ -464,8 +464,6 @@ const api = {
   getMySensitive(){ return this.rpc('get_my_sensitive_data'); },
   getMyPreferences(){ return this.rpc('get_my_preferences'); },
   getCandidateProfiles(filters){ return this.rpc('get_candidate_profiles', filters); },
-  getPublicCandidateProfiles(filters){ return this.rpc('get_public_candidate_profiles', filters); },
-  getPublicCandidateById(id){ return this.rpc('get_public_candidate_profile_by_id', {p_candidate_id:id}); },
   getCandidateById(id){ return this.rpc('get_candidate_profile_by_id', {p_candidate_id:id}); },
   getMutualMatches(limit,offset){ return this.rpc('get_mutual_matches', {p_limit:limit||20, p_offset:offset||0}); },
   isAdmin(){ return this.rpc('is_admin'); },
@@ -536,20 +534,6 @@ async function ensureGeo(){
 ========================================================= */
 const PUBLIC_ROUTES = ['/','/login','/register','/discovery'];
 const PUBLIC_PREFIXES = ['/candidate/'];
-function handleAuthCallbackUrl(){
-  const params = new URLSearchParams(window.location.search);
-  const hasAuthResult = params.has('code') || params.has('error') || params.has('error_code');
-  if(hasAuthResult){
-    const errorCode = params.get('error_code');
-    const errorDesc = params.get('error_description');
-    if(errorCode || errorDesc){
-      console.warn('[AUTH] confirmation callback:', errorCode || errorDesc);
-      setTimeout(()=>toast(errorCode === 'otp_expired' ? 'رابط تأكيد البريد انتهت صلاحيته. اطلب رسالة تأكيد جديدة.' : 'تعذر تأكيد البريد من هذا الرابط. اطلب رسالة تأكيد جديدة.','error'), 250);
-    }
-    window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
-  }
-}
-handleAuthCallbackUrl();
 function currentHash(){ return location.hash.replace(/^#/,'') || '/'; }
 function navigate(path){ location.hash = path; }
 window.addEventListener('hashchange', ()=>render());
@@ -1213,8 +1197,11 @@ async function mountDiscovery(app){
 }
 async function runDiscovery(){
   const box = document.getElementById('disc-results');
-  const publicMode = !S.session;
-  box.innerHTML = loadingBox(publicMode ? 'جارِ تحميل المرشحين المتاحين للعامة…' : 'جارِ البحث…');
+  if(!S.session){
+    box.innerHTML = `<div class="state-box"><div class="icon">🔐</div><h3>البحث الآمن يحتاج إلى حساب</h3><p>بحث المرشحين الحالي يعتمد على RPC محمي في قاعدة البيانات. لم يتم فتحه للزوار قبل التحقق من وجود واجهة Public Safe Discovery منفصلة.</p><div class="flex" style="justify-content:center;gap:8px;margin-top:12px;"><button class="btn btn-primary btn-sm" onclick="navigate('/register')">إنشاء حساب</button><button class="btn btn-outline btn-sm" onclick="navigate('/login')">تسجيل الدخول</button></div></div>`;
+    return;
+  }
+  box.innerHTML = loadingBox('جارِ البحث…');
   const filters = {
     p_limit: DISCOVERY_LIMIT, p_offset: discoveryOffset,
     p_min_age: numOrNull('df-min_age'), p_max_age: numOrNull('df-max_age'),
@@ -1222,7 +1209,7 @@ async function runDiscovery(){
     p_marital_statuses: chipsOn('df-marital').length? chipsOn('df-marital') : null
   };
   try{
-    const res = publicMode ? await api.getPublicCandidateProfiles(filters) : await api.getCandidateProfiles(filters);
+    const res = await api.getCandidateProfiles(filters);
     if(!res.items || !res.items.length){
       box.innerHTML = emptyBox('🔍','لا توجد نتائج مطابقة','جرّب تعديل الفلاتر أو إكمال ملفك الشخصي وتفضيلاتك أولًا.');
       return;
@@ -1265,8 +1252,12 @@ function requireAuthGate(actionLabel='هذه الخاصية'){
 ========================================================= */
 async function mountCandidate(app, id){
   app.innerHTML=loadingBox('جارِ تحميل الملف…');
+  if(!S.session){
+    app.innerHTML=`<div class="container narrow">${emptyBox('🔐','التصفح العام غير متاح حاليًا','وظيفة Public Profiles تحتاج صلاحية آمنة من الـBackend. لم يتم فتح RLS أو تجاوز الصلاحيات من الواجهة.')}</div>`;
+    return;
+  }
   try{
-    const c=S.session ? await api.getCandidateById(id) : await api.getPublicCandidateById(id);
+    const c=await api.getCandidateById(id);
     if(!c){app.innerHTML=emptyBox('🚫','هذا الملف غير متاح','قد يكون غير مكتمل أو غير متاح وفق صلاحيات النظام.');return;}
     const gov=c.governorate?c.governorate.name_ar:'غير محدد';
     const traits=(c.personality_traits||[]).map(t=>`<span class="chip">${L('personality_trait',t)}</span>`).join('')||'<span class="muted">لا يوجد</span>';
@@ -1291,7 +1282,7 @@ async function mountCandidate(app, id){
     const msg=(e&&e.message)||'';
     app.innerHTML=errorBox(e);
     if(!S.session && /auth|jwt|permission|not authenticated/i.test(msg)){
-      app.innerHTML=`<div class="container narrow">${emptyBox('🔐','الملف العام غير متاح','هذا الملف لا يمكن عرضه ضمن بيانات التصفح العامة الآمنة.')}</div>`;
+      app.innerHTML=`<div class="container narrow">${emptyBox('🔐','التصفح العام غير متاح حاليًا','وظيفة Public Profiles تحتاج صلاحية آمنة من الـBackend. لم يتم فتح RLS أو تجاوز الصلاحيات من الواجهة.')}</div>`;
     }
   }
 }
@@ -1543,12 +1534,6 @@ sb.auth.onAuthStateChange(async (event, session)=>{
     return;
   }
   if(session){
-    const confirmed = !!session.user?.email_confirmed_at;
-    if(!confirmed){
-      S.session = null;
-      if(S.booted) render();
-      return;
-    }
     S.session = session;
     if(S.booted){ await loadAccountContext(); render(); }
   }
