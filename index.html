@@ -1,0 +1,1343 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مودة | منصة الزواج الجاد</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💍</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --c-bg:#faf7f2; --c-surface:#ffffff; --c-surface-2:#f3ede3;
+  --c-primary:#7a4a3a; --c-primary-dark:#5c362a; --c-primary-light:#a9705b;
+  --c-accent:#b08d57; --c-accent-light:#e7d9bd;
+  --c-text:#2c2420; --c-text-muted:#7a6f66; --c-border:#e6ddd0;
+  --c-success:#3f7d5c; --c-success-bg:#e5f3ec;
+  --c-warn:#a97514; --c-warn-bg:#fbf1de;
+  --c-danger:#a33b3b; --c-danger-bg:#fbe9e9;
+  --c-info:#3a6ea5; --c-info-bg:#e8f1fb;
+  --radius:14px; --radius-sm:9px;
+  --shadow:0 2px 10px rgba(60,40,25,0.08);
+  --shadow-lg:0 10px 30px rgba(60,40,25,0.14);
+  --maxw:1080px;
+  --header-h:64px; --bottomnav-h:64px;
+}
+*{box-sizing:border-box;}
+html{scroll-padding-top:calc(var(--header-h) + env(safe-area-inset-top,0px));}
+body{
+  margin:0; font-family:'Tajawal',system-ui,sans-serif; background:var(--c-bg); color:var(--c-text);
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  -webkit-font-smoothing:antialiased;
+}
+img{max-width:100%;}
+a{color:inherit;}
+button{font-family:inherit;}
+h1,h2,h3,h4{margin:0 0 8px; font-weight:900; line-height:1.3;}
+p{line-height:1.8; color:var(--c-text-muted); margin:0 0 10px;}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 16px;}
+
+/* Header */
+.header{
+  position:sticky; top:0; z-index:40; background:rgba(250,247,242,0.92); backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--c-border); padding-top:env(safe-area-inset-top,0px);
+}
+.header-inner{max-width:var(--maxw); margin:0 auto; height:var(--header-h); display:flex; align-items:center; justify-content:space-between; padding:0 16px;}
+.brand{display:flex; align-items:center; gap:8px; font-weight:900; font-size:22px; color:var(--c-primary); cursor:pointer;}
+.brand .dot{color:var(--c-accent);}
+.header-actions{display:flex; align-items:center; gap:10px;}
+.nav-desktop{display:none; gap:4px;}
+@media(min-width:860px){ .nav-desktop{display:flex;} }
+.nav-link{padding:9px 14px; border-radius:99px; font-weight:700; font-size:14px; cursor:pointer; color:var(--c-text-muted); white-space:nowrap;}
+.nav-link.active{background:var(--c-primary); color:#fff;}
+.nav-link:hover:not(.active){background:var(--c-surface-2);}
+
+/* Buttons */
+.btn{display:inline-flex; align-items:center; justify-content:center; gap:6px; border:none; border-radius:99px; padding:11px 22px; font-weight:700; font-size:15px; cursor:pointer; transition:.15s; white-space:nowrap;}
+.btn-primary{background:var(--c-primary); color:#fff;}
+.btn-primary:hover{background:var(--c-primary-dark);}
+.btn-outline{background:transparent; color:var(--c-primary); border:1.5px solid var(--c-primary);}
+.btn-outline:hover{background:var(--c-surface-2);}
+.btn-ghost{background:transparent; color:var(--c-text-muted);}
+.btn-ghost:hover{background:var(--c-surface-2);}
+.btn-danger{background:var(--c-danger); color:#fff;}
+.btn-danger:hover{opacity:.9;}
+.btn-success{background:var(--c-success); color:#fff;}
+.btn-sm{padding:7px 14px; font-size:13px;}
+.btn-block{width:100%;}
+.btn:disabled{opacity:.5; cursor:not-allowed;}
+
+/* Layout */
+.container{max-width:var(--maxw); margin:0 auto; padding:24px 16px 48px;}
+.container.narrow{max-width:520px;}
+.grid{display:grid; gap:16px;}
+@media(min-width:700px){ .grid-2{grid-template-columns:1fr 1fr;} .grid-3{grid-template-columns:repeat(3,1fr);} }
+
+/* Cards */
+.card{background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow);}
+.card-tight{padding:14px;}
+.section-title{display:flex; align-items:center; justify-content:space-between; margin:28px 0 12px;}
+.section-title h3{margin:0;}
+.badge{display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:99px; font-size:12px; font-weight:700;}
+.badge-success{background:var(--c-success-bg); color:var(--c-success);}
+.badge-warn{background:var(--c-warn-bg); color:var(--c-warn);}
+.badge-danger{background:var(--c-danger-bg); color:var(--c-danger);}
+.badge-info{background:var(--c-info-bg); color:var(--c-info);}
+.badge-muted{background:var(--c-surface-2); color:var(--c-text-muted);}
+.chip{display:inline-block; padding:4px 12px; border-radius:99px; background:var(--c-surface-2); color:var(--c-text); font-size:13px; font-weight:500; margin:2px;}
+.chip-select{cursor:pointer; border:1.5px solid var(--c-border); background:var(--c-surface);}
+.chip-select.on{background:var(--c-primary); border-color:var(--c-primary); color:#fff;}
+
+/* Forms */
+label{display:block; font-weight:700; font-size:13px; margin:14px 0 5px; color:var(--c-text);}
+label:first-child{margin-top:0;}
+.hint{font-size:12px; color:var(--c-text-muted); margin-top:4px;}
+input[type=text],input[type=email],input[type=password],input[type=number],input[type=tel],input[type=date],select,textarea{
+  width:100%; padding:11px 14px; border-radius:var(--radius-sm); border:1.5px solid var(--c-border);
+  background:var(--c-surface); font-family:inherit; font-size:15px; color:var(--c-text);
+}
+textarea{resize:vertical; min-height:90px;}
+input:focus,select:focus,textarea:focus{outline:none; border-color:var(--c-primary);}
+.row-2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+.field-error{color:var(--c-danger); font-size:12.5px; margin-top:4px;}
+fieldset{border:1px solid var(--c-border); border-radius:var(--radius-sm); padding:12px 14px; margin:14px 0 0;}
+legend{font-weight:700; font-size:13px; padding:0 6px;}
+
+/* Progress */
+.progress{height:9px; background:var(--c-surface-2); border-radius:99px; overflow:hidden;}
+.progress > div{height:100%; background:linear-gradient(90deg,var(--c-accent),var(--c-primary)); border-radius:99px; transition:width .3s;}
+
+/* Toast */
+#toast-container{position:fixed; top:calc(var(--header-h) + 12px + env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%); z-index:200; display:flex; flex-direction:column; gap:8px; width:min(92vw,380px);}
+.toast{padding:12px 16px; border-radius:var(--radius-sm); box-shadow:var(--shadow-lg); font-size:14px; font-weight:600; color:#fff; animation:slidein .2s ease;}
+.toast-success{background:var(--c-success);} .toast-error{background:var(--c-danger);} .toast-info{background:var(--c-primary);}
+@keyframes slidein{from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:translateY(0);}}
+
+/* Modal */
+.modal-backdrop{position:fixed; inset:0; background:rgba(30,20,15,0.5); z-index:150; display:flex; align-items:flex-end; justify-content:center;}
+@media(min-width:640px){ .modal-backdrop{align-items:center;} }
+.modal{background:var(--c-surface); border-radius:18px 18px 0 0; max-width:480px; width:100%; max-height:88vh; overflow-y:auto; padding:22px; box-shadow:var(--shadow-lg);}
+@media(min-width:640px){ .modal{border-radius:var(--radius);} }
+
+/* Empty / loading / error states */
+.state-box{text-align:center; padding:40px 20px; color:var(--c-text-muted);}
+.state-box .icon{font-size:40px; margin-bottom:10px;}
+.spinner{width:34px; height:34px; border:3px solid var(--c-surface-2); border-top-color:var(--c-primary); border-radius:50%; animation:spin .7s linear infinite; margin:0 auto;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.skeleton{background:linear-gradient(90deg,var(--c-surface-2) 25%,#eee5d7 37%,var(--c-surface-2) 63%); background-size:400% 100%; animation:sk 1.4s ease infinite; border-radius:var(--radius-sm); height:80px;}
+@keyframes sk{0%{background-position:100% 50%;} 100%{background-position:0 50%;}}
+
+/* Bottom nav (mobile) */
+.bottom-nav{position:fixed; bottom:0; left:0; right:0; z-index:40; background:var(--c-surface); border-top:1px solid var(--c-border);
+  display:flex; padding-bottom:env(safe-area-inset-bottom,0px);}
+@media(min-width:860px){ .bottom-nav{display:none;} }
+.bn-item{flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:9px 2px; font-size:11px; font-weight:700; color:var(--c-text-muted); cursor:pointer;}
+.bn-item.active{color:var(--c-primary);}
+.bn-icon{font-size:19px;}
+body.has-bottomnav .container{padding-bottom:calc(var(--bottomnav-h) + 24px);}
+
+/* Hero */
+.hero{padding:48px 0 32px; text-align:center;}
+.hero h1{font-size:clamp(28px,5vw,44px); color:var(--c-primary-dark);}
+.hero p.lead{font-size:17px; max-width:560px; margin:0 auto 22px;}
+.hero-actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
+.feature-list{display:grid; gap:14px; margin-top:30px;}
+@media(min-width:700px){ .feature-list{grid-template-columns:repeat(3,1fr);} }
+.feature-item{background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--radius); padding:18px; text-align:center;}
+.feature-item .emoji{font-size:30px; margin-bottom:8px;}
+.steps{counter-reset:step; display:grid; gap:14px; margin-top:14px;}
+.step{display:flex; gap:14px; align-items:flex-start; background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--radius); padding:16px;}
+.step-num{flex-shrink:0; width:32px; height:32px; border-radius:50%; background:var(--c-primary); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:900;}
+
+/* candidate card */
+.cand-card{background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--radius); padding:16px; cursor:pointer; transition:.15s;}
+.cand-card:hover{box-shadow:var(--shadow-lg); border-color:var(--c-accent);}
+.cand-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+.cand-age{font-weight:900; font-size:20px; color:var(--c-primary-dark);}
+
+/* misc */
+.muted{color:var(--c-text-muted);}
+.center{text-align:center;}
+.mt0{margin-top:0;} .mb0{margin-bottom:0;}
+.flex{display:flex; align-items:center;}
+.flex-between{display:flex; align-items:center; justify-content:space-between;}
+.gap8{gap:8px;} .gap12{gap:12px;}
+.tabs{display:flex; gap:4px; border-bottom:1.5px solid var(--c-border); margin-bottom:16px; overflow-x:auto;}
+.tab{padding:10px 16px; font-weight:700; color:var(--c-text-muted); cursor:pointer; border-bottom:2.5px solid transparent; white-space:nowrap;}
+.tab.active{color:var(--c-primary); border-color:var(--c-primary);}
+.hr{border:none; border-top:1px solid var(--c-border); margin:16px 0;}
+.coming-soon{opacity:.55; position:relative;}
+.list-empty-illustration{font-size:44px;}
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+<div id="modal-root"></div>
+<header class="header" id="site-header" style="display:none;">
+  <div class="header-inner">
+    <div class="brand" data-nav="/">مودة<span class="dot">•</span></div>
+    <nav class="nav-desktop" id="nav-desktop"></nav>
+    <div class="header-actions" id="header-actions"></div>
+  </div>
+</header>
+<div id="app"></div>
+<div id="bottom-nav-root"></div>
+
+<script>
+/* =========================================================
+   1. CONFIGURATION
+========================================================= */
+const SUPABASE_URL = 'https://ihrxihmckaebhltnhauh.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlocnhpaG1ja2FlYmhsdG5oYXVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwOTM2MTIsImV4cCI6MjEwNTY2OTYxMn0.aVYSlVpbEgD4YoBmPdr8pUxsDzy6Uw2-0KqeX0FesAc';
+
+/* =========================================================
+   2. SUPABASE INITIALIZATION
+========================================================= */
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+});
+
+/* =========================================================
+   3. STATE
+========================================================= */
+const S = {
+  session: null,
+  account: null,        // row from user_accounts
+  profile: null,         // get_my_full_profile() result
+  profileStatus: null,   // get_profile_completion_status()
+  prefStatus: null,      // get_preferences_completion_status()
+  isAdmin: false,
+  adminPerms: {},         // { 'requests.view': true, ... }
+  governorates: [],
+  cities: [],
+  booted: false,
+  route: '/',
+  params: {},
+  authBusy: false
+};
+
+const LABELS = {
+  gender:{male:'ذكر',female:'أنثى'},
+  body_build:{slim:'نحيف',average:'متوسط',athletic:'رياضي',heavy:'ممتلئ'},
+  skin_tone:{very_fair:'فاتح جدًا',fair:'فاتح',wheat:'قمحي',olive:'زيتوني',brown:'أسمر',dark:'داكن'},
+  hair_color:{black:'أسود',brown:'بني',blonde:'أشقر',red:'أحمر',gray_white:'رمادي/أبيض',other:'أخرى'},
+  beard:{none:'بدون لحية',trimmed:'مهذبة',full:'كثيفة'},
+  hijab:{none:'بدون حجاب',hijab:'حجاب',niqab:'نقاب'},
+  health_status:{good:'جيدة',fair:'متوسطة',has_condition:'توجد حالة صحية'},
+  disability_type:{none:'لا يوجد',physical_mobility:'حركية',visual_impairment:'بصرية',hearing_impairment:'سمعية',chronic_illness:'مرض مزمن',other:'أخرى'},
+  education_level:{below_secondary:'أقل من ثانوي',secondary:'ثانوي',diploma:'دبلوم',bachelor:'بكالوريوس',master:'ماجستير',phd:'دكتوراه'},
+  work_stability:{stable:'مستقر',unstable:'غير مستقر',seeking_work:'يبحث عن عمل',not_working:'لا يعمل',student:'طالب'},
+  marital_status:{single:'أعزب/عزباء',divorced:'مطلّق/ة',widowed:'أرمل/ة',married:'متزوج/ة'},
+  housing_status:{owns_housing:'يملك سكن',renting:'إيجار',will_provide_after_marriage:'سيوفر سكن بعد الزواج',living_with_family:'يسكن مع الأهل'},
+  housing_type:{independent_apartment:'شقة مستقلة',shared_with_family:'مشتركة مع الأهل',other:'أخرى'},
+  relocation_willingness:{yes:'نعم',no:'لا',depends:'حسب الظروف'},
+  work_after_marriage:{yes:'نعم',no:'لا',depends:'حسب الظروف',not_applicable:'لا ينطبق'},
+  childbearing_preference:{wants_children:'يريد أطفال',open_to_children:'منفتح على الفكرة',does_not_want_children:'لا يريد أطفال',undecided:'غير محدد'},
+  home_readiness:{ready:'جاهز',in_preparation:'قيد التجهيز',not_ready:'غير جاهز',not_applicable:'لا ينطبق'},
+  commitment:{always:'دائمًا',mostly:'غالبًا',sometimes:'أحيانًا',rarely:'نادرًا'},
+  smoking_status:{non_smoker:'غير مدخن',smoker:'مدخن',trying_to_quit:'يحاول الإقلاع',occasional:'أحيانًا'},
+  personality_trait:{responsible:'مسؤول',honest:'صادق',family_oriented:'أسري',cooperative:'متعاون',calm:'هادئ',ambitious:'طموح',social:'اجتماعي',humble:'متواضع',organized:'منظم',privacy_respecting:'يحترم الخصوصية'},
+  children_preference:{no_preference:'بدون تفضيل',accepts:'يتقبل',prefers_none:'يفضل عدم وجودهم'},
+  polygamy_preference_male:{no_interest:'غير مهتم',accept_consider:'يقبل وينظر بالأمر',seeking:'يسعى إليه',discuss_with_admin:'يُناقش مع الإدارة'},
+  polygamy_preference_female:{accept_married_man:'تقبل رجل متزوج',do_not_accept:'لا تقبل',depends:'حسب الظروف',discuss_with_admin:'يُناقش مع الإدارة'},
+  request_status:{pending:'قيد المراجعة',accepted:'مقبول',declined:'مرفوض',withdrawn:'مسحوب'},
+  review_decision:{pending:'قيد مراجعة الإدارة',approved:'معتمد من الإدارة',rejected:'مرفوض من الإدارة'}
+};
+function L(group,val){ if(val===null||val===undefined) return '—'; return (LABELS[group]&&LABELS[group][val])||val; }
+function opts(group){ return Object.entries(LABELS[group]).map(([v,t])=>`<option value="${v}">${t}</option>`).join(''); }
+
+/* =========================================================
+   17. UI HELPERS — toast / modal / loading
+========================================================= */
+function toast(msg, type='info'){
+  const c = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 3200);
+}
+function friendlyError(err){
+  const m = (err && err.message) ? err.message : String(err||'حدث خطأ غير متوقع');
+  const code = err && err.code;
+  if(code==='email_not_confirmed' || /Email not confirmed/i.test(m)) return 'لم يتم تأكيد بريدك الإلكتروني بعد. تحقق من صندوق الوارد (أو الرسائل غير المرغوبة) واضغط رابط التأكيد قبل تسجيل الدخول.';
+  if(code==='invalid_credentials' || /Invalid login credentials/i.test(m)) return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+  if(/JWT|not authenticated|Auth session missing/i.test(m)) return 'انتهت صلاحية الجلسة، الرجاء تسجيل الدخول مرة أخرى.';
+  if(/Failed to fetch|NetworkError/i.test(m)) return 'تعذر الاتصال بالخادم، تحقق من اتصال الإنترنت.';
+  return m;
+}
+function openModal(innerHtml, onMount){
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `<div class="modal-backdrop" id="modal-backdrop"><div class="modal">${innerHtml}</div></div>`;
+  document.getElementById('modal-backdrop').addEventListener('click', (e)=>{ if(e.target.id==='modal-backdrop') closeModal(); });
+  if(onMount) onMount(root);
+}
+function closeModal(){ document.getElementById('modal-root').innerHTML=''; }
+function confirmModal(title, msg, confirmLabel, onConfirm, danger){
+  openModal(`
+    <h3>${title}</h3>
+    <p>${msg}</p>
+    <div class="flex gap8" style="justify-content:flex-end; margin-top:18px;">
+      <button class="btn btn-ghost" id="cm-cancel">إلغاء</button>
+      <button class="btn ${danger?'btn-danger':'btn-primary'}" id="cm-ok">${confirmLabel}</button>
+    </div>
+  `, (root)=>{
+    root.querySelector('#cm-cancel').onclick = closeModal;
+    root.querySelector('#cm-ok').onclick = async ()=>{ closeModal(); await onConfirm(); };
+  });
+}
+function loadingBox(text){ return `<div class="state-box"><div class="spinner"></div><p style="margin-top:12px;">${text||'جارِ التحميل…'}</p></div>`; }
+function emptyBox(icon,title,sub){ return `<div class="state-box"><div class="icon list-empty-illustration">${icon}</div><h3 style="color:var(--c-text);">${title}</h3><p>${sub||''}</p></div>`; }
+function errorBox(msg,retryFnName){ return `<div class="state-box"><div class="icon">⚠️</div><h3 style="color:var(--c-danger);">حدث خطأ</h3><p>${friendlyError(msg)}</p>${retryFnName?`<button class="btn btn-outline" onclick="${retryFnName}">إعادة المحاولة</button>`:''}</div>`; }
+
+/* =========================================================
+   6. API / RPC LAYER
+========================================================= */
+const api = {
+  async rpc(name, args){ const {data,error} = await sb.rpc(name, args||{}); if(error) throw error; return data; },
+  getProfileCompletion(){ return this.rpc('get_profile_completion_status'); },
+  getPrefsCompletion(){ return this.rpc('get_preferences_completion_status'); },
+  getMyFullProfile(){ return this.rpc('get_my_full_profile'); },
+  getMySensitive(){ return this.rpc('get_my_sensitive_data'); },
+  getMyPreferences(){ return this.rpc('get_my_preferences'); },
+  getCandidateProfiles(filters){ return this.rpc('get_candidate_profiles', filters); },
+  getCandidateById(id){ return this.rpc('get_candidate_profile_by_id', {p_candidate_id:id}); },
+  getMutualMatches(limit,offset){ return this.rpc('get_mutual_matches', {p_limit:limit||20, p_offset:offset||0}); },
+  isAdmin(){ return this.rpc('is_admin'); },
+  hasPerm(code){ return this.rpc('has_admin_permission', {p_permission_code:code}); },
+  adminReview(requestId, decision, reason){ return this.rpc('admin_review_marriage_request', {p_request_id:requestId, p_decision:decision, p_reason:reason||null}); }
+};
+
+/* =========================================================
+   4. AUTH
+========================================================= */
+async function doSignUp(email, password){
+  const {data, error} = await sb.auth.signUp({ email, password });
+  if(error) throw error;
+  return data;
+}
+async function doSignIn(email, password){
+  const {data, error} = await sb.auth.signInWithPassword({ email, password });
+  if(error) throw error;
+  return data;
+}
+async function doSignOut(){
+  await sb.auth.signOut();
+  Object.assign(S, {session:null, account:null, profile:null, profileStatus:null, prefStatus:null, isAdmin:false, adminPerms:{}});
+  navigate('/');
+}
+
+async function loadAccountContext(){
+  if(!S.session){ return; }
+  const uid = S.session.user.id;
+  const {data: acc, error: accErr} = await sb.from('user_accounts').select('*').eq('id', uid).maybeSingle();
+  if(accErr){ toast(friendlyError(accErr),'error'); return; }
+  S.account = acc;
+  try{
+    S.profileStatus = await api.getProfileCompletion();
+    S.prefStatus = await api.getPrefsCompletion();
+  }catch(e){ /* not fatal on first login before profile exists */ }
+  try{
+    S.isAdmin = await api.isAdmin();
+    if(S.isAdmin){
+      const [rv, rr] = await Promise.all([api.hasPerm('requests.view'), api.hasPerm('requests.review')]);
+      S.adminPerms = {'requests.view':rv, 'requests.review':rr};
+    }
+  }catch(e){ S.isAdmin=false; }
+}
+
+async function ensureGeo(){
+  if(S.governorates.length) return;
+  const {data, error} = await sb.from('geo_governorates').select('*').eq('is_active',true).order('sort_order');
+  if(!error) S.governorates = data||[];
+}
+
+/* =========================================================
+   5. ROUTER / VIEW MANAGER
+========================================================= */
+const PUBLIC_ROUTES = ['/','/login','/register'];
+function currentHash(){ return location.hash.replace(/^#/,'') || '/'; }
+function navigate(path){ location.hash = path; }
+window.addEventListener('hashchange', ()=>render());
+
+async function render(){
+  const full = currentHash();
+  const [path, qs] = full.split('?');
+  S.route = path.split('/').slice(0,2).join('/') || '/';
+  const parts = path.split('/').filter(Boolean);
+  S.params = {};
+  if(parts[0]==='candidate') S.params.id = parts[1];
+
+  const loggedIn = !!S.session;
+  if(!loggedIn && !PUBLIC_ROUTES.includes(path)){ navigate('/login'); return; }
+  if(loggedIn && PUBLIC_ROUTES.includes(path) && path!=='/'){ navigate('/dashboard'); return; }
+
+  document.getElementById('site-header').style.display = loggedIn ? 'block':'block';
+  renderHeader();
+  renderBottomNav();
+
+  const app = document.getElementById('app');
+  window.scrollTo(0,0);
+
+  const routeKey = parts[0] || 'landing';
+  try{
+    switch(routeKey){
+      case '': case 'landing': app.innerHTML = loggedIn ? loadingBox() : viewLanding(); if(loggedIn) navigate('/dashboard'); break;
+      case 'login': app.innerHTML = viewLogin(); mountAuthForm('login'); break;
+      case 'register': app.innerHTML = viewRegister(); mountAuthForm('register'); break;
+      case 'dashboard': await mountDashboard(app); break;
+      case 'profile': await mountProfile(app); break;
+      case 'preferences': await mountPreferences(app); break;
+      case 'discovery': await mountDiscovery(app); break;
+      case 'candidate': await mountCandidate(app, S.params.id); break;
+      case 'matches': await mountMatches(app); break;
+      case 'requests': await mountRequests(app); break;
+      case 'guardians': await mountGuardians(app); break;
+      case 'admin': await mountAdmin(app); break;
+      default: app.innerHTML = emptyBox('🔍','الصفحة غير موجودة','تحقق من الرابط أو عد للرئيسية.');
+    }
+  }catch(e){
+    console.error(e);
+    app.innerHTML = errorBox(e);
+  }
+}
+
+function renderHeader(){
+  const loggedIn = !!S.session;
+  const nav = document.getElementById('nav-desktop');
+  const actions = document.getElementById('header-actions');
+  if(!loggedIn){
+    nav.innerHTML='';
+    actions.innerHTML = `<span class="nav-link" data-nav="/login">دخول</span><button class="btn btn-primary btn-sm" data-nav="/register">إنشاء حساب</button>`;
+  } else {
+    const links = [
+      ['/dashboard','الرئيسية'],['/discovery','استكشاف'],['/matches','التوافق'],
+      ['/requests','الطلبات'],['/profile','ملفي'],['/preferences','تفضيلاتي'],['/guardians','الأولياء']
+    ];
+    if(S.isAdmin) links.push(['/admin','الإدارة']);
+    nav.innerHTML = links.map(([p,l])=>`<span class="nav-link ${S.route===p?'active':''}" data-nav="${p}">${l}</span>`).join('');
+    actions.innerHTML = `<span class="badge badge-muted">${S.account?S.account.member_code:''}</span><button class="btn btn-ghost btn-sm" id="btn-logout">خروج</button>`;
+  }
+  document.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.getAttribute('data-nav')));
+  const lo = document.getElementById('btn-logout'); if(lo) lo.onclick = doSignOut;
+}
+
+function renderBottomNav(){
+  const root = document.getElementById('bottom-nav-root');
+  document.body.classList.remove('has-bottomnav');
+  if(!S.session){ root.innerHTML=''; return; }
+  const items = [
+    ['/dashboard','🏠','الرئيسية'],['/discovery','🔎','استكشاف'],['/matches','💞','التوافق'],
+    ['/requests','✉️','الطلبات'],['/profile','👤','ملفي']
+  ];
+  root.innerHTML = `<div class="bottom-nav">${items.map(([p,i,l])=>`
+    <div class="bn-item ${S.route===p?'active':''}" data-nav="${p}"><span class="bn-icon">${i}</span>${l}</div>
+  `).join('')}</div>`;
+  root.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.getAttribute('data-nav')));
+  document.body.classList.add('has-bottomnav');
+}
+
+/* =========================================================
+   PUBLIC — Landing / Login / Register
+========================================================= */
+function viewLanding(){
+  return `
+  <div class="hero wrap">
+    <h1>مودة</h1>
+    <p class="lead">منصة زواج جادة تضع الخصوصية والانضباط الشرعي أولًا. لا تصفّح عشوائي، ولا تواصل غير مُراقب — كل خطوة تمر عبر مراجعة إدارية.</p>
+    <div class="hero-actions">
+      <button class="btn btn-primary" data-nav="/register">ابدأ رحلتك الآن</button>
+      <button class="btn btn-outline" data-nav="/login">لديك حساب؟ دخول</button>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="feature-list">
+      <div class="feature-item"><div class="emoji">🔒</div><h4>الخصوصية أولًا</h4><p class="mb0">بياناتك لا تُعرض إلا بالقدر الذي تسمح به، ولا يوجد تصفح علني لأعضاء المنصة.</p></div>
+      <div class="feature-item"><div class="emoji">🛡️</div><h4>بوابة إدارية</h4><p class="mb0">كل طلب تواصل يمر بمراجعة إدارية قبل وصوله للطرف الآخر.</p></div>
+      <div class="feature-item"><div class="emoji">👪</div><h4>دور الأولياء</h4><p class="mb0">إمكانية إضافة بيانات الأولياء ضمن حسابك لمزيد من الطمأنينة.</p></div>
+    </div>
+    <div class="section-title"><h3>كيف تعمل المنصة</h3></div>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div><strong>أنشئ حسابك</strong><p class="mb0">سجّل بياناتك الأساسية وأكمل ملفك الشخصي وتفضيلاتك.</p></div></div>
+      <div class="step"><div class="step-num">2</div><div><strong>استكشف بخصوصية</strong><p class="mb0">تصفح مرشحين متوافقين دون عرض بيانات تعريفية حساسة.</p></div></div>
+      <div class="step"><div class="step-num">3</div><div><strong>أرسل طلب تعارف</strong><p class="mb0">يُرسل الطلب لمراجعة الإدارة أولًا قبل وصوله للطرف الآخر.</p></div></div>
+      <div class="step"><div class="step-num">4</div><div><strong>القبول والمتابعة</strong><p class="mb0">بعد الموافقة الإدارية، يمكن للطرف الآخر قبول الطلب أو رفضه.</p></div></div>
+    </div>
+    <div class="center" style="margin-top:34px;">
+      <button class="btn btn-primary" data-nav="/register">سجّل الآن مجانًا</button>
+    </div>
+  </div>`;
+}
+
+function viewLogin(){
+  return `<div class="container narrow">
+    <div class="card">
+      <h2 class="center">تسجيل الدخول</h2>
+      <p class="center">مرحبًا بعودتك إلى مودة</p>
+      <div id="auth-error"></div>
+      <label>البريد الإلكتروني</label><input type="email" id="f-email" autocomplete="email">
+      <label>كلمة المرور</label><input type="password" id="f-password" autocomplete="current-password">
+      <button class="btn btn-primary btn-block" id="f-submit" style="margin-top:18px;">دخول</button>
+      <p class="center" style="margin-top:16px;">ليس لديك حساب؟ <a style="color:var(--c-primary); font-weight:700; cursor:pointer;" data-nav="/register">أنشئ حسابًا</a></p>
+    </div>
+  </div>`;
+}
+function viewRegister(){
+  return `<div class="container narrow">
+    <div class="card">
+      <h2 class="center">إنشاء حساب جديد</h2>
+      <p class="center">خطوة أولى نحو زواج جاد ومحترم لخصوصيتك</p>
+      <div id="auth-error"></div>
+      <label>البريد الإلكتروني</label><input type="email" id="f-email" autocomplete="email">
+      <label>كلمة المرور</label><input type="password" id="f-password" autocomplete="new-password">
+      <p class="hint">6 أحرف على الأقل.</p>
+      <button class="btn btn-primary btn-block" id="f-submit" style="margin-top:10px;">إنشاء الحساب</button>
+      <p class="center" style="margin-top:16px;">لديك حساب بالفعل؟ <a style="color:var(--c-primary); font-weight:700; cursor:pointer;" data-nav="/login">دخول</a></p>
+    </div>
+  </div>`;
+}
+function mountAuthForm(mode){
+  document.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.getAttribute('data-nav')));
+  const btn = document.getElementById('f-submit');
+  btn.onclick = async ()=>{
+    const email = document.getElementById('f-email').value.trim();
+    const password = document.getElementById('f-password').value;
+    const errBox = document.getElementById('auth-error');
+    errBox.innerHTML='';
+    if(!email || !password){ errBox.innerHTML = `<p class="field-error">أدخل البريد الإلكتروني وكلمة المرور.</p>`; return; }
+    btn.disabled = true; btn.textContent = 'جارٍ التنفيذ…';
+    try{
+      if(mode==='register'){
+        const data = await doSignUp(email, password);
+        if(data.session){ toast('تم إنشاء الحساب بنجاح','success'); await bootAfterAuth(data.session); navigate('/profile'); }
+        else{ toast('تم إنشاء الحساب. تحقق من بريدك الإلكتروني لتأكيد الحساب ثم سجّل الدخول.','success'); navigate('/login'); }
+      } else {
+        const data = await doSignIn(email, password);
+        await bootAfterAuth(data.session);
+        toast('تم تسجيل الدخول','success');
+        navigate('/dashboard');
+      }
+    }catch(e){
+      const isUnconfirmed = (e && e.code==='email_not_confirmed') || /Email not confirmed/i.test((e&&e.message)||'');
+      errBox.innerHTML = `<p class="field-error">${friendlyError(e)}</p>${(mode!=='register'&&isUnconfirmed)?`<p><a id="f-resend-confirm" style="color:var(--c-primary); font-weight:700; cursor:pointer;">إعادة إرسال رابط التأكيد</a></p>`:''}`;
+      if(mode!=='register' && isUnconfirmed){
+        const resendLink = document.getElementById('f-resend-confirm');
+        if(resendLink) resendLink.onclick = async ()=>{
+          try{ const {error:re} = await sb.auth.resend({ type:'signup', email }); if(re) throw re; toast('تم إرسال رابط التأكيد من جديد، تحقق من بريدك.','success'); }
+          catch(re){ toast(friendlyError(re),'error'); }
+        };
+      }
+    }finally{
+      btn.disabled = false; btn.textContent = mode==='register' ? 'إنشاء الحساب':'دخول';
+    }
+  };
+}
+
+/* =========================================================
+   DASHBOARD
+========================================================= */
+async function mountDashboard(app){
+  app.innerHTML = loadingBox('جارِ تحميل لوحتك…');
+  let sentCount=0, receivedCount=0;
+  try{
+    const {count:sc} = await sb.from('marriage_requests').select('id',{count:'exact',head:true}).eq('sender_id', S.session.user.id);
+    sentCount = sc||0;
+    const {count:rc} = await sb.from('marriage_requests').select('id',{count:'exact',head:true}).eq('recipient_id', S.session.user.id);
+    receivedCount = rc||0;
+  }catch(e){}
+  const ps = S.profileStatus, prs = S.prefStatus;
+  app.innerHTML = `
+  <div class="container">
+    <h2>أهلًا بك 👋</h2>
+    <p>رمز عضويتك: <strong>${S.account ? S.account.member_code : '—'}</strong></p>
+
+    <div class="grid grid-2">
+      <div class="card">
+        <div class="flex-between"><h4 class="mb0">اكتمال الملف الشخصي</h4><span class="badge ${ps&&ps.core_complete?'badge-success':'badge-warn'}">${ps?ps.completion_percentage:0}%</span></div>
+        <div class="progress" style="margin-top:10px;"><div style="width:${ps?ps.completion_percentage:0}%"></div></div>
+        <p style="margin-top:10px;">${ps&&ps.core_complete?'ملفك الأساسي مكتمل، أكمل التفاصيل لتحسين ظهورك.':'أكمل بياناتك الأساسية أولًا حتى يظهر ملفك في الاستكشاف.'}</p>
+        <button class="btn btn-outline btn-sm" data-nav="/profile">إكمال الملف</button>
+      </div>
+      <div class="card">
+        <div class="flex-between"><h4 class="mb0">اكتمال التفضيلات</h4><span class="badge ${prs&&prs.is_complete?'badge-success':'badge-warn'}">${prs?prs.completion_percentage:0}%</span></div>
+        <div class="progress" style="margin-top:10px;"><div style="width:${prs?prs.completion_percentage:0}%"></div></div>
+        <p style="margin-top:10px;">حدّد مواصفات شريك الحياة لتحصل على ترشيحات أدق.</p>
+        <button class="btn btn-outline btn-sm" data-nav="/preferences">إكمال التفضيلات</button>
+      </div>
+    </div>
+
+    <div class="grid grid-3" style="margin-top:16px;">
+      <div class="card card-tight center"><h3 class="mb0">${sentCount}</h3><p class="mb0">طلبات مرسلة</p></div>
+      <div class="card card-tight center"><h3 class="mb0">${receivedCount}</h3><p class="mb0">طلبات واردة</p></div>
+      <div class="card card-tight center"><h3 class="mb0">💞</h3><p class="mb0"><a data-nav="/matches" style="color:var(--c-primary); font-weight:700; cursor:pointer;">عرض التوافقات</a></p></div>
+    </div>
+
+    <div class="section-title"><h3>ابدأ الآن</h3></div>
+    <div class="grid grid-3">
+      <div class="card center"><div style="font-size:28px;">🔎</div><h4>استكشاف مرشحين</h4><button class="btn btn-primary btn-sm" data-nav="/discovery">تصفح</button></div>
+      <div class="card center"><div style="font-size:28px;">✉️</div><h4>طلبات الزواج</h4><button class="btn btn-primary btn-sm" data-nav="/requests">عرض الطلبات</button></div>
+      <div class="card center"><div style="font-size:28px;">👪</div><h4>بيانات الأولياء</h4><button class="btn btn-primary btn-sm" data-nav="/guardians">إدارة</button></div>
+    </div>
+  </div>`;
+  document.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.getAttribute('data-nav')));
+}
+
+/* =========================================================
+   PROFILE — basic / lifestyle / traits / sensitive / children
+========================================================= */
+let profileTab = 'basic';
+async function mountProfile(app){
+  app.innerHTML = loadingBox('جارِ تحميل ملفك الشخصي…');
+  let full, sensitive;
+  try{
+    full = await api.getMyFullProfile();
+    sensitive = await api.getMySensitive();
+  }catch(e){ app.innerHTML = errorBox(e); return; }
+  S.profile = full;
+  renderProfileShell(app, full, sensitive);
+}
+function renderProfileShell(app, full, sensitive){
+  const p = full.profile || {};
+  const l = full.lifestyle || {};
+  const t = full.traits || {};
+  const children = full.children || [];
+  app.innerHTML = `
+  <div class="container">
+    <h2>ملفي الشخصي</h2>
+    <div class="tabs" id="profile-tabs">
+      <div class="tab" data-t="basic">البيانات الأساسية</div>
+      <div class="tab" data-t="lifestyle">نمط الحياة</div>
+      <div class="tab" data-t="traits">السمات والالتزام</div>
+      <div class="tab" data-t="children">الأبناء</div>
+      <div class="tab" data-t="sensitive">بيانات حساسة</div>
+    </div>
+    <div id="profile-panel" class="card"></div>
+  </div>`;
+  document.querySelectorAll('#profile-tabs .tab').forEach(el=>{
+    if(el.dataset.t===profileTab) el.classList.add('active');
+    el.onclick = ()=>{ profileTab = el.dataset.t; renderProfileShell(app, full, sensitive); };
+  });
+  const panel = document.getElementById('profile-panel');
+  if(profileTab==='basic') renderBasicForm(panel, p);
+  else if(profileTab==='lifestyle') renderLifestyleForm(panel, l);
+  else if(profileTab==='traits') renderTraitsForm(panel, t);
+  else if(profileTab==='children') renderChildrenPanel(panel, p, children);
+  else if(profileTab==='sensitive') renderSensitiveForm(panel, sensitive);
+}
+
+function renderBasicForm(panel, p){
+  ensureGeo();
+  panel.innerHTML = `
+    <label>الاسم الكامل</label><input type="text" id="pf-full_name" value="${p.full_name||''}">
+    <div class="row-2">
+      <div><label>الجنس</label><select id="pf-gender"><option value="">اختر</option>${['male','female'].map(v=>`<option value="${v}" ${p.gender===v?'selected':''}>${L('gender',v)}</option>`).join('')}</select></div>
+      <div><label>تاريخ الميلاد</label><input type="date" id="pf-date_of_birth" value="${p.date_of_birth||''}"></div>
+    </div>
+    <div class="row-2">
+      <div><label>الطول (سم)</label><input type="number" id="pf-height_cm" value="${p.height_cm||''}"></div>
+      <div><label>الوزن (كجم)</label><input type="number" id="pf-weight_kg" value="${p.weight_kg||''}"></div>
+    </div>
+    <div class="row-2">
+      <div><label>البنية الجسدية</label><select id="pf-body_build"><option value="">—</option>${selOpts('body_build',p.body_build)}</select></div>
+      <div><label>لون البشرة</label><select id="pf-skin_tone"><option value="">—</option>${selOpts('skin_tone',p.skin_tone)}</select></div>
+    </div>
+    <div class="row-2">
+      <div><label>لون الشعر</label><select id="pf-hair_color"><option value="">—</option>${selOpts('hair_color',p.hair_color)}</select></div>
+      <div id="gender-specific-basic"></div>
+    </div>
+    <div class="row-2">
+      <div><label>المؤهل الدراسي</label><select id="pf-education_level"><option value="">—</option>${selOpts('education_level',p.education_level)}</select></div>
+      <div><label>التخصص</label><input type="text" id="pf-education_major" value="${p.education_major||''}"></div>
+    </div>
+    <div class="row-2">
+      <div><label>المسمى الوظيفي</label><input type="text" id="pf-job_title" value="${p.job_title||''}"></div>
+      <div><label>استقرار العمل</label><select id="pf-work_stability"><option value="">—</option>${selOpts('work_stability',p.work_stability)}</select></div>
+    </div>
+    <div class="row-2">
+      <div><label>الحالة الاجتماعية</label><select id="pf-marital_status"><option value="">اختر</option>${selOpts('marital_status',p.marital_status)}</select></div>
+      <div><label>عدد الأبناء</label><input type="number" min="0" id="pf-children_count" value="${p.children_count||0}"></div>
+    </div>
+    <div class="row-2">
+      <div><label>الحالة الصحية</label><select id="pf-health_status">${selOpts('health_status',p.health_status||'good')}</select></div>
+      <div><label>نوع الإعاقة (إن وجدت)</label><select id="pf-disability_type">${selOpts('disability_type',p.disability_type||'none')}</select></div>
+    </div>
+    <div id="disability-details-wrap" style="display:${p.disability_type&&p.disability_type!=='none'?'block':'none'};">
+      <label>تفاصيل الإعاقة</label><textarea id="pf-disability_other_details">${p.disability_other_details||''}</textarea>
+    </div>
+    <div class="row-2">
+      <div><label>المحافظة</label><select id="pf-governorate_id"><option value="">اختر</option></select></div>
+      <div><label>المدينة/المركز</label><select id="pf-city_id"><option value="">اختر المحافظة أولًا</option></select></div>
+    </div>
+    <label>نبذة شخصية</label><textarea id="pf-bio">${p.bio||''}</textarea>
+    <button class="btn btn-primary btn-block" id="pf-save" style="margin-top:16px;">حفظ البيانات الأساسية</button>
+  `;
+  const gWrap = document.getElementById('gender-specific-basic');
+  function renderGenderField(){
+    const g = document.getElementById('pf-gender').value;
+    if(g==='male') gWrap.innerHTML = `<label>اللحية</label><select id="pf-beard"><option value="">—</option>${selOpts('beard',p.beard)}</select>`;
+    else if(g==='female') gWrap.innerHTML = `<label>الحجاب</label><select id="pf-hijab"><option value="">—</option>${selOpts('hijab',p.hijab)}</select>`;
+    else gWrap.innerHTML = '';
+  }
+  renderGenderField();
+  document.getElementById('pf-gender').onchange = renderGenderField;
+  document.getElementById('pf-disability_type').onchange = (e)=>{
+    document.getElementById('disability-details-wrap').style.display = (e.target.value && e.target.value!=='none') ? 'block':'none';
+  };
+  // geo
+  const govSel = document.getElementById('pf-governorate_id');
+  const citySel = document.getElementById('pf-city_id');
+  async function fillGov(){
+    await ensureGeo();
+    govSel.innerHTML = `<option value="">اختر</option>` + S.governorates.map(g=>`<option value="${g.id}" ${p.governorate_id==g.id?'selected':''}>${g.name_ar}</option>`).join('');
+    fillCities(p.governorate_id);
+  }
+  async function fillCities(govId){
+    if(!govId){ citySel.innerHTML = `<option value="">اختر المحافظة أولًا</option>`; return; }
+    const {data} = await sb.from('geo_cities').select('*').eq('governorate_id', govId).eq('is_active',true).order('sort_order');
+    if(!data || !data.length){ citySel.innerHTML = `<option value="">لا توجد مدن متاحة حاليًا لهذه المحافظة</option>`; return; }
+    citySel.innerHTML = `<option value="">اختر</option>` + data.map(c=>`<option value="${c.id}" ${p.city_id==c.id?'selected':''}>${c.name_ar}</option>`).join('');
+  }
+  fillGov();
+  govSel.onchange = (e)=>fillCities(e.target.value);
+
+  document.getElementById('pf-save').onclick = async ()=>{
+    const btn = document.getElementById('pf-save'); btn.disabled=true; btn.textContent='جارٍ الحفظ…';
+    try{
+      const payload = {
+        user_id: S.session.user.id,
+        full_name: val('pf-full_name'), gender: val('pf-gender')||null, date_of_birth: val('pf-date_of_birth')||null,
+        height_cm: numOrNull('pf-height_cm'), weight_kg: numOrNull('pf-weight_kg'),
+        body_build: val('pf-body_build')||null, skin_tone: val('pf-skin_tone')||null, hair_color: val('pf-hair_color')||null,
+        education_level: val('pf-education_level')||null, education_major: val('pf-education_major')||null,
+        job_title: val('pf-job_title')||null, work_stability: val('pf-work_stability')||null,
+        marital_status: val('pf-marital_status')||null, children_count: numOrNull('pf-children_count')||0,
+        health_status: val('pf-health_status'), disability_type: val('pf-disability_type'),
+        disability_other_details: val('pf-disability_other_details')||null,
+        governorate_id: numOrNull('pf-governorate_id'), city_id: numOrNull('pf-city_id'),
+        bio: val('pf-bio')||null
+      };
+      const beardEl = document.getElementById('pf-beard'); if(beardEl) payload.beard = beardEl.value||null;
+      const hijabEl = document.getElementById('pf-hijab'); if(hijabEl) payload.hijab = hijabEl.value||null;
+      const {error} = await sb.from('user_profiles').upsert(payload, {onConflict:'user_id'});
+      if(error) throw error;
+      toast('تم حفظ البيانات الأساسية','success');
+      S.profileStatus = await api.getProfileCompletion();
+      await mountProfile(document.getElementById('app'));
+    }catch(e){ toast(friendlyError(e),'error'); }
+    finally{ btn.disabled=false; btn.textContent='حفظ البيانات الأساسية'; }
+  };
+}
+function selOpts(group, current){ return Object.entries(LABELS[group]).map(([v,t])=>`<option value="${v}" ${current===v?'selected':''}>${t}</option>`).join(''); }
+function val(id){ const el=document.getElementById(id); return el? el.value.trim ? el.value.trim() : el.value : ''; }
+function numOrNull(id){ const v = val(id); return (v===''||v===undefined) ? null : Number(v); }
+
+function renderLifestyleForm(panel, l){
+  panel.innerHTML = `
+    <div class="row-2">
+      <div><label>الحالة السكنية</label><select id="lf-housing_status"><option value="">—</option>${selOpts('housing_status',l.housing_status)}</select></div>
+      <div><label>نوع السكن</label><select id="lf-housing_type"><option value="">—</option>${selOpts('housing_type',l.housing_type)}</select></div>
+    </div>
+    <div class="row-2">
+      <div><label>الاستعداد للانتقال</label><select id="lf-relocation_willingness"><option value="">—</option>${selOpts('relocation_willingness',l.relocation_willingness)}</select></div>
+      <div><label>العمل بعد الزواج</label><select id="lf-work_after_marriage"><option value="">—</option>${selOpts('work_after_marriage',l.work_after_marriage)}</select></div>
+    </div>
+    <div class="row-2">
+      <div><label>الرغبة في الإنجاب</label><select id="lf-childbearing_preference"><option value="">—</option>${selOpts('childbearing_preference',l.childbearing_preference)}</select></div>
+      <div><label>جاهزية بيت الزوجية</label><select id="lf-home_readiness"><option value="">—</option>${selOpts('home_readiness',l.home_readiness)}</select></div>
+    </div>
+    <button class="btn btn-primary btn-block" id="lf-save" style="margin-top:16px;">حفظ نمط الحياة</button>
+  `;
+  document.getElementById('lf-save').onclick = async ()=>{
+    const btn = document.getElementById('lf-save'); btn.disabled=true; btn.textContent='جارٍ الحفظ…';
+    try{
+      const payload = { user_id: S.session.user.id };
+      ['housing_status','housing_type','relocation_willingness','work_after_marriage','childbearing_preference','home_readiness'].forEach(f=>{ payload[f] = val('lf-'+f)||null; });
+      const {error} = await sb.from('user_profile_lifestyle').upsert(payload, {onConflict:'user_id'});
+      if(error) throw error;
+      toast('تم حفظ نمط الحياة','success');
+      S.profileStatus = await api.getProfileCompletion();
+      await mountProfile(document.getElementById('app'));
+    }catch(e){ toast(friendlyError(e),'error'); }
+    finally{ btn.disabled=false; btn.textContent='حفظ نمط الحياة'; }
+  };
+}
+
+function renderTraitsForm(panel, t){
+  const selected = new Set(t.personality_traits||[]);
+  panel.innerHTML = `
+    <div class="row-2">
+      <div><label>الالتزام بالصلاة</label><select id="tf-prayer_commitment"><option value="">—</option>${selOpts('commitment',t.prayer_commitment)}</select></div>
+      <div><label>الالتزام بالصيام</label><select id="tf-fasting_commitment"><option value="">—</option>${selOpts('commitment',t.fasting_commitment)}</select></div>
+    </div>
+    <label>التدخين</label><select id="tf-smoking_status">${selOpts('smoking_status',t.smoking_status||'non_smoker')}</select>
+    <label>السمات الشخصية (اختر ما ينطبق)</label>
+    <div id="traits-chips">${Object.entries(LABELS.personality_trait).map(([v,tx])=>`<span class="chip chip-select ${selected.has(v)?'on':''}" data-v="${v}">${tx}</span>`).join('')}</div>
+    <button class="btn btn-primary btn-block" id="tf-save" style="margin-top:16px;">حفظ السمات</button>
+  `;
+  panel.querySelectorAll('#traits-chips .chip-select').forEach(chip=>{
+    chip.onclick = ()=> chip.classList.toggle('on');
+  });
+  document.getElementById('tf-save').onclick = async ()=>{
+    const btn = document.getElementById('tf-save'); btn.disabled=true; btn.textContent='جارٍ الحفظ…';
+    try{
+      const traits = [...panel.querySelectorAll('#traits-chips .chip-select.on')].map(c=>c.dataset.v);
+      const payload = {
+        user_id: S.session.user.id,
+        prayer_commitment: val('tf-prayer_commitment')||null,
+        fasting_commitment: val('tf-fasting_commitment')||null,
+        smoking_status: val('tf-smoking_status'),
+        personality_traits: traits
+      };
+      const {error} = await sb.from('user_profile_traits').upsert(payload, {onConflict:'user_id'});
+      if(error) throw error;
+      toast('تم حفظ السمات','success');
+      S.profileStatus = await api.getProfileCompletion();
+      await mountProfile(document.getElementById('app'));
+    }catch(e){ toast(friendlyError(e),'error'); }
+    finally{ btn.disabled=false; btn.textContent='حفظ السمات'; }
+  };
+}
+
+function renderChildrenPanel(panel, p, children){
+  if(!p.children_count || p.children_count<=0){
+    panel.innerHTML = emptyBox('👶','لا داعٍ لإدارة الأبناء','عدد الأبناء في بياناتك الأساسية 0. عدّل العدد من تبويب البيانات الأساسية إن لزم.');
+    return;
+  }
+  panel.innerHTML = `
+    <div class="flex-between"><h4 class="mb0">أبناؤك (${children.length})</h4><button class="btn btn-primary btn-sm" id="ch-add">إضافة</button></div>
+    <div id="ch-list" style="margin-top:12px;">
+      ${children.length? children.map(c=>`
+        <div class="card card-tight flex-between" style="margin-bottom:8px;">
+          <span>العمر التقريبي: ${c.approximate_age??'—'} — ${c.lives_with_user?'يعيش معه/ها':'لا يعيش معه/ها'}</span>
+          <button class="btn btn-ghost btn-sm" data-del="${c.id}">حذف</button>
+        </div>`).join('') : emptyBox('👶','لا يوجد أبناء مسجلون بعد','')}
+    </div>
+  `;
+  document.getElementById('ch-add').onclick = ()=>{
+    openModal(`
+      <h3>إضافة بيانات ابن/ابنة</h3>
+      <label>العمر التقريبي</label><input type="number" min="0" max="30" id="ch-age">
+      <label>يعيش مع مقدم الطلب؟</label><select id="ch-lives"><option value="true">نعم</option><option value="false">لا</option></select>
+      <button class="btn btn-primary btn-block" id="ch-save" style="margin-top:16px;">حفظ</button>
+    `, (root)=>{
+      root.querySelector('#ch-save').onclick = async ()=>{
+        try{
+          const {error} = await sb.from('user_profile_children').insert({
+            user_id: S.session.user.id,
+            approximate_age: numOrNull('ch-age'),
+            lives_with_user: document.getElementById('ch-lives').value==='true'
+          });
+          if(error) throw error;
+          closeModal(); toast('تمت الإضافة','success');
+          await mountProfile(document.getElementById('app'));
+        }catch(e){ toast(friendlyError(e),'error'); }
+      };
+    });
+  };
+  panel.querySelectorAll('[data-del]').forEach(btn=>{
+    btn.onclick = ()=> confirmModal('حذف السجل','هل تريد حذف بيانات هذا الابن/الابنة؟','حذف', async ()=>{
+      try{
+        const {error} = await sb.from('user_profile_children').delete().eq('id', btn.dataset.del);
+        if(error) throw error;
+        toast('تم الحذف','success');
+        await mountProfile(document.getElementById('app'));
+      }catch(e){ toast(friendlyError(e),'error'); }
+    }, true);
+  });
+}
+
+function renderSensitiveForm(panel, s){
+  s = s || {};
+  panel.innerHTML = `
+    <p class="hint">هذه البيانات خاصة بك فقط ولا تظهر في ملفك أمام المرشحين.</p>
+    <label>تفاصيل صحية</label><textarea id="sf-health_details">${s.health_details||''}</textarea>
+    <label>تفاصيل زواج سابق</label><textarea id="sf-previous_marriage_details">${s.previous_marriage_details||''}</textarea>
+    <label>تفاصيل أسرية حساسة</label><textarea id="sf-sensitive_family_details">${s.sensitive_family_details||''}</textarea>
+    <label>تفاصيل مالية حساسة</label><textarea id="sf-sensitive_financial_details">${s.sensitive_financial_details||''}</textarea>
+    <button class="btn btn-primary btn-block" id="sf-save" style="margin-top:16px;">حفظ البيانات الحساسة</button>
+  `;
+  document.getElementById('sf-save').onclick = async ()=>{
+    const btn = document.getElementById('sf-save'); btn.disabled=true; btn.textContent='جارٍ الحفظ…';
+    try{
+      const payload = { user_id: S.session.user.id };
+      ['health_details','previous_marriage_details','sensitive_family_details','sensitive_financial_details'].forEach(f=>{ payload[f]=val('sf-'+f)||null; });
+      const {error} = await sb.from('user_profile_sensitive').upsert(payload, {onConflict:'user_id'});
+      if(error) throw error;
+      toast('تم الحفظ','success');
+    }catch(e){ toast(friendlyError(e),'error'); }
+    finally{ btn.disabled=false; btn.textContent='حفظ البيانات الحساسة'; }
+  };
+}
+
+/* =========================================================
+   PREFERENCES
+========================================================= */
+async function mountPreferences(app){
+  app.innerHTML = loadingBox('جارِ تحميل تفضيلاتك…');
+  let data;
+  try{ data = await api.getMyPreferences(); }catch(e){ app.innerHTML = errorBox(e); return; }
+  await ensureGeo();
+  const pr = data.preferences || {};
+  const selectedGovIds = new Set((data.preferred_governorates||[]).map(g=>g.governorate_id));
+  const myGender = (S.profile && S.profile.profile && S.profile.profile.gender) || null;
+  app.innerHTML = `
+  <div class="container">
+    <h2>تفضيلات شريك الحياة</h2>
+    <div class="card">
+      <div class="row-2">
+        <div><label>الحد الأدنى للعمر</label><input type="number" id="pr-min_age" value="${pr.min_age??''}"></div>
+        <div><label>الحد الأقصى للعمر</label><input type="number" id="pr-max_age" value="${pr.max_age??''}"></div>
+      </div>
+      <div class="row-2">
+        <div><label>الحد الأدنى للطول (سم)</label><input type="number" id="pr-min_height_cm" value="${pr.min_height_cm??''}"></div>
+        <div><label>الحد الأقصى للطول (سم)</label><input type="number" id="pr-max_height_cm" value="${pr.max_height_cm??''}"></div>
+      </div>
+      <div class="row-2">
+        <div><label>الحد الأدنى للوزن (كجم)</label><input type="number" id="pr-min_weight_kg" value="${pr.min_weight_kg??''}"></div>
+        <div><label>الحد الأقصى للوزن (كجم)</label><input type="number" id="pr-max_weight_kg" value="${pr.max_weight_kg??''}"></div>
+      </div>
+
+      <label>لون البشرة المفضل</label><div id="chips-skin">${multiChips('skin_tone', pr.skin_tones_preferred)}</div>
+      <label>الحالة الاجتماعية المقبولة</label><div id="chips-marital">${multiChips('marital_status', pr.marital_statuses_preferred)}</div>
+      <label>وجود أبناء</label><select id="pr-children_preference"><option value="">—</option>${selOpts('children_preference',pr.children_preference)}</select>
+      <label>المؤهل الدراسي المفضل</label><div id="chips-edu">${multiChips('education_level', pr.education_levels_preferred)}</div>
+      <label>استقرار العمل المفضل</label><div id="chips-work">${multiChips('work_stability', pr.work_stability_preferred)}</div>
+      <label>الحالة السكنية المفضلة</label><div id="chips-housing">${multiChips('housing_status', pr.housing_status_preferred)}</div>
+      <label>الاستعداد للانتقال</label><select id="pr-relocation_preference"><option value="">—</option>${selOpts('relocation_willingness',pr.relocation_preference)}</select>
+      <label>التدخين المقبول</label><div id="chips-smoking">${multiChips('smoking_status', pr.smoking_status_preferred)}</div>
+      <label>العمل بعد الزواج</label><select id="pr-work_after_marriage_preference"><option value="">—</option>${selOpts('work_after_marriage',pr.work_after_marriage_preference)}</select>
+      <label>الرغبة في الإنجاب</label><select id="pr-childbearing_preference_match"><option value="">—</option>${selOpts('childbearing_preference',pr.childbearing_preference_match)}</select>
+      <div id="gender-specific-pref"></div>
+      <label>السمات الشخصية المفضلة</label><div id="chips-traits">${multiChips('personality_trait', pr.personality_traits_preferred)}</div>
+
+      <label>المحافظات المفضلة</label>
+      <div id="chips-gov">${S.governorates.map(g=>`<span class="chip chip-select ${selectedGovIds.has(g.id)?'on':''}" data-v="${g.id}">${g.name_ar}</span>`).join('')}</div>
+      <p class="hint">اختيار المحافظات يحدد لاحقًا نطاق اختيار المدن (إن توفرت مدن مضافة للمحافظة).</p>
+
+      <button class="btn btn-primary btn-block" id="pr-save" style="margin-top:18px;">حفظ التفضيلات</button>
+    </div>
+  </div>`;
+  const genderWrap = document.getElementById('gender-specific-pref');
+  if(myGender==='male'){
+    genderWrap.innerHTML = `<label>الحجاب المفضل</label><div id="chips-hijab">${multiChips('hijab', pr.hijab_preference)}</div>
+      <label>تعدد الزوجات</label><select id="pr-polygamy_preference_male"><option value="">—</option>${selOpts('polygamy_preference_male',pr.polygamy_preference_male)}</select>`;
+  } else if(myGender==='female'){
+    genderWrap.innerHTML = `<label>اللحية المفضلة</label><div id="chips-beard">${multiChips('beard', pr.beard_preference)}</div>
+      <label>موقفك من تعدد الزوجات</label><select id="pr-polygamy_preference_female"><option value="">—</option>${selOpts('polygamy_preference_female',pr.polygamy_preference_female)}</select>`;
+  } else {
+    genderWrap.innerHTML = `<p class="hint">أكمل بياناتك الأساسية (الجنس) أولًا لعرض تفضيلات إضافية خاصة بك.</p>`;
+  }
+  document.querySelectorAll('.chip-select').forEach(chip=> chip.onclick = ()=> chip.classList.toggle('on'));
+
+  document.getElementById('pr-save').onclick = async ()=>{
+    const btn = document.getElementById('pr-save'); btn.disabled=true; btn.textContent='جارٍ الحفظ…';
+    try{
+      const payload = {
+        user_id: S.session.user.id,
+        min_age:numOrNull('pr-min_age'), max_age:numOrNull('pr-max_age'),
+        min_height_cm:numOrNull('pr-min_height_cm'), max_height_cm:numOrNull('pr-max_height_cm'),
+        min_weight_kg:numOrNull('pr-min_weight_kg'), max_weight_kg:numOrNull('pr-max_weight_kg'),
+        skin_tones_preferred: chipsOn('chips-skin'), marital_statuses_preferred: chipsOn('chips-marital'),
+        children_preference: val('pr-children_preference')||null,
+        education_levels_preferred: chipsOn('chips-edu'), work_stability_preferred: chipsOn('chips-work'),
+        housing_status_preferred: chipsOn('chips-housing'), relocation_preference: val('pr-relocation_preference')||null,
+        smoking_status_preferred: chipsOn('chips-smoking'), work_after_marriage_preference: val('pr-work_after_marriage_preference')||null,
+        childbearing_preference_match: val('pr-childbearing_preference_match')||null,
+        personality_traits_preferred: chipsOn('chips-traits')
+      };
+      if(myGender==='male'){ payload.hijab_preference = chipsOn('chips-hijab'); payload.polygamy_preference_male = val('pr-polygamy_preference_male')||null; }
+      if(myGender==='female'){ payload.beard_preference = chipsOn('chips-beard'); payload.polygamy_preference_female = val('pr-polygamy_preference_female')||null; }
+
+      const {error} = await sb.from('user_preferences').upsert(payload, {onConflict:'user_id'});
+      if(error) throw error;
+
+      // sync preferred governorates (diff insert/delete)
+      const newGovIds = new Set(chipsOn('chips-gov').map(Number));
+      const {data: existingGov} = await sb.from('user_preference_governorates').select('id,governorate_id').eq('user_id', S.session.user.id);
+      const existingIds = new Set((existingGov||[]).map(r=>r.governorate_id));
+      const toInsert = [...newGovIds].filter(id=>!existingIds.has(id)).map(id=>({user_id:S.session.user.id, governorate_id:id}));
+      const toDeleteRows = (existingGov||[]).filter(r=>!newGovIds.has(r.governorate_id));
+      if(toInsert.length){ const {error:e1} = await sb.from('user_preference_governorates').insert(toInsert); if(e1) throw e1; }
+      for(const row of toDeleteRows){ const {error:e2} = await sb.from('user_preference_governorates').delete().eq('id', row.id); if(e2) throw e2; }
+
+      toast('تم حفظ التفضيلات','success');
+      S.prefStatus = await api.getPrefsCompletion();
+      await mountPreferences(document.getElementById('app'));
+    }catch(e){ toast(friendlyError(e),'error'); }
+    finally{ btn.disabled=false; btn.textContent='حفظ التفضيلات'; }
+  };
+}
+function multiChips(group, currentArr){
+  const cur = new Set(currentArr||[]);
+  return Object.entries(LABELS[group]).map(([v,t])=>`<span class="chip chip-select ${cur.has(v)?'on':''}" data-v="${v}">${t}</span>`).join('');
+}
+function chipsOn(containerId){ return [...document.getElementById(containerId).querySelectorAll('.chip-select.on')].map(c=>c.dataset.v); }
+
+/* =========================================================
+   DISCOVERY
+========================================================= */
+let discoveryOffset = 0;
+const DISCOVERY_LIMIT = 12;
+async function mountDiscovery(app){
+  await ensureGeo();
+  app.innerHTML = `
+  <div class="container">
+    <h2>استكشاف المرشحين</h2>
+    <div class="card card-tight">
+      <div class="row-2">
+        <div><label>العمر من</label><input type="number" id="df-min_age"></div>
+        <div><label>إلى</label><input type="number" id="df-max_age"></div>
+      </div>
+      <label>المحافظة</label><select id="df-gov"><option value="">الكل</option>${S.governorates.map(g=>`<option value="${g.id}">${g.name_ar}</option>`).join('')}</select>
+      <label>الحالة الاجتماعية</label><div id="df-marital">${multiChips('marital_status',[])}</div>
+      <button class="btn btn-primary btn-sm" id="df-apply" style="margin-top:14px;">تطبيق الفلاتر</button>
+    </div>
+    <div id="disc-results" style="margin-top:18px;">${loadingBox('جارِ البحث عن مرشحين…')}</div>
+  </div>`;
+  document.querySelectorAll('#df-marital .chip-select').forEach(c=>c.onclick=()=>c.classList.toggle('on'));
+  document.getElementById('df-apply').onclick = ()=>{ discoveryOffset=0; runDiscovery(); };
+  discoveryOffset = 0;
+  runDiscovery();
+}
+async function runDiscovery(){
+  const box = document.getElementById('disc-results');
+  box.innerHTML = loadingBox('جارِ البحث…');
+  const filters = {
+    p_limit: DISCOVERY_LIMIT, p_offset: discoveryOffset,
+    p_min_age: numOrNull('df-min_age'), p_max_age: numOrNull('df-max_age'),
+    p_governorate_id: numOrNull('df-gov'),
+    p_marital_statuses: chipsOn('df-marital').length? chipsOn('df-marital') : null
+  };
+  try{
+    const res = await api.getCandidateProfiles(filters);
+    if(!res.items || !res.items.length){
+      box.innerHTML = emptyBox('🔍','لا توجد نتائج مطابقة','جرّب تعديل الفلاتر أو إكمال ملفك الشخصي وتفضيلاتك أولًا.');
+      return;
+    }
+    box.innerHTML = `<div class="grid grid-3">${res.items.map(candCard).join('')}</div>
+      <div class="flex" style="justify-content:center; gap:10px; margin-top:20px;">
+        <button class="btn btn-outline btn-sm" id="disc-prev" ${discoveryOffset===0?'disabled':''}>السابق</button>
+        <span class="muted">${discoveryOffset+1}–${discoveryOffset+res.returned_count} من ${res.total_count}</span>
+        <button class="btn btn-outline btn-sm" id="disc-next" ${!res.has_more?'disabled':''}>التالي</button>
+      </div>`;
+    box.querySelectorAll('[data-cand]').forEach(el=>el.onclick=()=>navigate('/candidate/'+el.dataset.cand));
+    const prev = document.getElementById('disc-prev'); if(prev) prev.onclick=()=>{ discoveryOffset=Math.max(0,discoveryOffset-DISCOVERY_LIMIT); runDiscovery(); };
+    const next = document.getElementById('disc-next'); if(next) next.onclick=()=>{ discoveryOffset+=DISCOVERY_LIMIT; runDiscovery(); };
+  }catch(e){ box.innerHTML = errorBox(e); }
+}
+function candCard(c){
+  const gov = c.governorate ? c.governorate.name_ar : 'غير محدد';
+  const traits = (c.personality_traits||[]).slice(0,3).map(t=>`<span class="chip">${L('personality_trait',t)}</span>`).join('');
+  return `<div class="cand-card" data-cand="${c.candidate_id}">
+    <div class="cand-top"><span class="cand-age">${c.age??'—'} سنة</span><span class="badge badge-muted">${L('gender',c.gender)}</span></div>
+    <p class="mb0">📍 ${gov}</p>
+    <p class="mb0">🎓 ${L('education_level',c.education_level)}</p>
+    <p class="mb0">💍 ${L('marital_status',c.marital_status)}</p>
+    <div style="margin-top:8px;">${traits}</div>
+  </div>`;
+}
+
+/* =========================================================
+   CANDIDATE PROFILE
+========================================================= */
+async function mountCandidate(app, id){
+  app.innerHTML = loadingBox('جارِ تحميل الملف…');
+  try{
+    const c = await api.getCandidateById(id);
+    if(!c){ app.innerHTML = emptyBox('🚫','هذا الملف غير متاح','قد يكون غير مكتمل أو غير موجود أو لا يمكنك الوصول إليه حاليًا.'); return; }
+    const gov = c.governorate ? c.governorate.name_ar : 'غير محدد';
+    const traits = (c.personality_traits||[]).map(t=>`<span class="chip">${L('personality_trait',t)}</span>`).join('') || '<span class="muted">لا يوجد</span>';
+    app.innerHTML = `<div class="container narrow">
+      <button class="btn btn-ghost btn-sm" onclick="history.back()">→ رجوع</button>
+      <div class="card" style="margin-top:10px;">
+        <div class="flex-between"><h2 class="mb0">${c.age??'—'} سنة</h2><span class="badge badge-muted">${L('gender',c.gender)}</span></div>
+        <hr class="hr">
+        <p><strong>الحالة الاجتماعية:</strong> ${L('marital_status',c.marital_status)}</p>
+        <p><strong>المحافظة:</strong> ${gov}</p>
+        <p><strong>المؤهل الدراسي:</strong> ${L('education_level',c.education_level)}</p>
+        <p><strong>استقرار العمل:</strong> ${L('work_stability',c.work_stability)}</p>
+        <p><strong>الحالة السكنية:</strong> ${L('housing_status',c.housing_status)}</p>
+        <p><strong>الاستعداد للانتقال:</strong> ${L('relocation_willingness',c.relocation_willingness)}</p>
+        <p><strong>السمات الشخصية:</strong></p>
+        <div>${traits}</div>
+        <button class="btn btn-primary btn-block" id="send-request" style="margin-top:18px;">إرسال طلب تعارف للزواج</button>
+      </div>
+    </div>`;
+    document.getElementById('send-request').onclick = ()=>{
+      confirmModal('إرسال طلب زواج', 'سيتم إرسال طلبك لمراجعة الإدارة أولًا قبل وصوله للطرف الآخر. هل تريد المتابعة؟', 'إرسال', async ()=>{
+        try{
+          const {error} = await sb.from('marriage_requests').insert({ sender_id: S.session.user.id, recipient_id: id });
+          if(error) throw error;
+          toast('تم إرسال الطلب، بانتظار مراجعة الإدارة','success');
+          navigate('/requests');
+        }catch(e){ toast(friendlyError(e),'error'); }
+      });
+    };
+  }catch(e){ app.innerHTML = errorBox(e); }
+}
+
+/* =========================================================
+   MUTUAL MATCHING
+========================================================= */
+async function mountMatches(app){
+  app.innerHTML = loadingBox('جارِ حساب التوافقات…');
+  await ensureGeo();
+  try{
+    const rows = await api.getMutualMatches(20,0);
+    if(!rows || !rows.length){ app.innerHTML = `<div class="container">${emptyBox('💞','لا توجد توافقات متبادلة حاليًا','أكمل تفضيلاتك أو حاول لاحقًا عند انضمام أعضاء جدد.')}</div>`; return; }
+    app.innerHTML = `<div class="container"><h2>التوافقات المتبادلة</h2>
+      <p class="muted">هذه الترشيحات ناتجة مباشرة عن قاعدة البيانات بناءً على تفضيلاتكما المتبادلة.</p>
+      <div class="grid grid-3">${rows.map(r=>{
+        const gov = S.governorates.find(g=>g.id===r.candidate_governorate_id);
+        return `<div class="cand-card" data-cand="${r.candidate_id}">
+          <div class="cand-top"><span class="cand-age">${r.candidate_age??'—'} سنة</span><span class="badge badge-success">توافق ✓</span></div>
+          <p class="mb0">📍 ${gov?gov.name_ar:'—'}</p>
+          <p class="mb0">🎓 ${L('education_level',r.candidate_education_level)}</p>
+          <p class="mb0">💍 ${L('marital_status',r.candidate_marital_status)}</p>
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+    document.querySelectorAll('[data-cand]').forEach(el=>el.onclick=()=>navigate('/candidate/'+el.dataset.cand));
+  }catch(e){ app.innerHTML = errorBox(e); }
+}
+
+/* =========================================================
+   MARRIAGE REQUESTS
+========================================================= */
+let requestsTab = 'sent';
+async function mountRequests(app){
+  app.innerHTML = `<div class="container">
+    <h2>طلبات الزواج</h2>
+    <div class="tabs">
+      <div class="tab ${requestsTab==='sent'?'active':''}" data-t="sent">المرسلة</div>
+      <div class="tab ${requestsTab==='received'?'active':''}" data-t="received">الواردة</div>
+    </div>
+    <div id="req-panel">${loadingBox()}</div>
+  </div>`;
+  document.querySelectorAll('.tabs .tab').forEach(t=>t.onclick=()=>{ requestsTab=t.dataset.t; mountRequests(app); });
+  const panel = document.getElementById('req-panel');
+  try{
+    if(requestsTab==='sent') await renderSentRequests(panel);
+    else await renderReceivedRequests(panel);
+  }catch(e){ panel.innerHTML = errorBox(e); }
+}
+async function renderSentRequests(panel){
+  const {data, error} = await sb.from('marriage_requests').select('*').eq('sender_id', S.session.user.id).order('created_at',{ascending:false});
+  if(error) throw error;
+  if(!data.length){ panel.innerHTML = emptyBox('✉️','لم ترسل أي طلبات بعد','توجّه لصفحة الاستكشاف لإرسال طلب تعارف.'); return; }
+  const {data: reviews} = await sb.from('marriage_request_reviews').select('*').in('request_id', data.map(r=>r.id));
+  const reviewMap = Object.fromEntries((reviews||[]).map(r=>[r.request_id, r]));
+  panel.innerHTML = data.map(r=>{
+    const rev = reviewMap[r.id];
+    return `<div class="card card-tight" style="margin-bottom:10px;">
+      <div class="flex-between">
+        <span class="badge ${statusBadgeClass(r.status)}">${L('request_status',r.status)}</span>
+        <span class="muted" style="font-size:12px;">${new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
+      </div>
+      <p class="mb0" style="margin-top:6px;">حالة المراجعة الإدارية: <strong>${rev? L('review_decision',rev.decision):'—'}</strong>${rev&&rev.reason?` — السبب: ${rev.reason}`:''}</p>
+      <div class="flex gap8" style="margin-top:10px;">
+        <button class="btn btn-outline btn-sm" data-view="${r.recipient_id}">عرض الملف</button>
+        ${r.status==='pending'?`<button class="btn btn-danger btn-sm" data-withdraw="${r.id}">سحب الطلب</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  panel.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>navigate('/candidate/'+b.dataset.view));
+  panel.querySelectorAll('[data-withdraw]').forEach(b=>b.onclick=()=>{
+    confirmModal('سحب الطلب','هل أنت متأكد من سحب طلب الزواج هذا؟','سحب', async ()=>{
+      try{
+        const {error} = await sb.from('marriage_requests').update({status:'withdrawn'}).eq('id', b.dataset.withdraw);
+        if(error) throw error;
+        toast('تم سحب الطلب','success');
+        mountRequests(document.getElementById('app'));
+      }catch(e){ toast(friendlyError(e),'error'); }
+    }, true);
+  });
+}
+async function renderReceivedRequests(panel){
+  const {data, error} = await sb.from('marriage_requests').select('*').eq('recipient_id', S.session.user.id).order('created_at',{ascending:false});
+  if(error) throw error;
+  if(!data.length){ panel.innerHTML = emptyBox('📭','لا توجد طلبات واردة معتمدة حاليًا','تظهر الطلبات هنا فقط بعد موافقة إدارة المنصة عليها.'); return; }
+  panel.innerHTML = data.map(r=>`<div class="card card-tight" style="margin-bottom:10px;">
+      <div class="flex-between">
+        <span class="badge ${statusBadgeClass(r.status)}">${L('request_status',r.status)}</span>
+        <span class="muted" style="font-size:12px;">${new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
+      </div>
+      <div class="flex gap8" style="margin-top:10px;">
+        <button class="btn btn-outline btn-sm" data-view="${r.sender_id}">عرض الملف</button>
+        ${r.status==='pending'?`<button class="btn btn-success btn-sm" data-accept="${r.id}">قبول</button><button class="btn btn-danger btn-sm" data-decline="${r.id}">رفض</button>`:''}
+      </div>
+    </div>`).join('');
+  panel.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>navigate('/candidate/'+b.dataset.view));
+  panel.querySelectorAll('[data-accept]').forEach(b=>b.onclick=()=>{
+    confirmModal('قبول الطلب','هل تريد قبول طلب الزواج هذا؟','قبول', async ()=>{
+      try{ const {error} = await sb.from('marriage_requests').update({status:'accepted'}).eq('id', b.dataset.accept); if(error) throw error;
+        toast('تم قبول الطلب','success'); mountRequests(document.getElementById('app'));
+      }catch(e){ toast(friendlyError(e),'error'); }
+    });
+  });
+  panel.querySelectorAll('[data-decline]').forEach(b=>b.onclick=()=>{
+    confirmModal('رفض الطلب','هل تريد رفض طلب الزواج هذا؟','رفض', async ()=>{
+      try{ const {error} = await sb.from('marriage_requests').update({status:'declined'}).eq('id', b.dataset.decline); if(error) throw error;
+        toast('تم رفض الطلب','success'); mountRequests(document.getElementById('app'));
+      }catch(e){ toast(friendlyError(e),'error'); }
+    }, true);
+  });
+}
+function statusBadgeClass(s){ return {pending:'badge-warn',accepted:'badge-success',declined:'badge-danger',withdrawn:'badge-muted'}[s]||'badge-muted'; }
+
+/* =========================================================
+   GUARDIANS
+========================================================= */
+async function mountGuardians(app){
+  app.innerHTML = `<div class="container"><div class="flex-between"><h2 class="mb0">بيانات الأولياء</h2><button class="btn btn-primary btn-sm" id="g-add">إضافة ولي</button></div>
+    <p class="muted">هذه البيانات خاصة بك ولا تظهر في ملفك أمام المرشحين.</p>
+    <div id="g-list">${loadingBox()}</div></div>`;
+  document.getElementById('g-add').onclick = openGuardianModal;
+  await renderGuardiansList();
+}
+async function renderGuardiansList(){
+  const list = document.getElementById('g-list');
+  try{
+    const {data, error} = await sb.from('user_guardians').select('*').eq('user_id', S.session.user.id).order('created_at');
+    if(error) throw error;
+    if(!data.length){ list.innerHTML = emptyBox('👪','لم تُضِف أي ولي بعد','أضف بيانات ولي أمرك لمزيد من الطمأنينة والجدية.'); return; }
+    list.innerHTML = data.map(g=>`<div class="card card-tight flex-between" style="margin-bottom:8px;">
+      <div><strong>${g.guardian_name}</strong><p class="mb0">${g.relationship} · ${g.phone}${g.email?' · '+g.email:''}</p></div>
+      <div class="flex gap8"><button class="btn btn-ghost btn-sm" data-edit="${g.id}">تعديل</button><button class="btn btn-ghost btn-sm" data-del="${g.id}">حذف</button></div>
+    </div>`).join('');
+    list.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openGuardianModal(data.find(g=>g.id===b.dataset.edit)));
+    list.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+      confirmModal('حذف الولي','هل تريد حذف بيانات هذا الولي؟','حذف', async ()=>{
+        try{ const {error} = await sb.from('user_guardians').delete().eq('id', b.dataset.del); if(error) throw error;
+          toast('تم الحذف','success'); renderGuardiansList();
+        }catch(e){ toast(friendlyError(e),'error'); }
+      }, true);
+    });
+  }catch(e){ list.innerHTML = errorBox(e); }
+}
+function openGuardianModal(existing){
+  openModal(`
+    <h3>${existing?'تعديل بيانات الولي':'إضافة ولي'}</h3>
+    <label>الاسم</label><input type="text" id="gm-name" value="${existing?existing.guardian_name:''}">
+    <label>صلة القرابة</label><input type="text" id="gm-rel" value="${existing?existing.relationship:''}">
+    <label>الهاتف</label><input type="tel" id="gm-phone" value="${existing?existing.phone:''}">
+    <label>البريد الإلكتروني (اختياري)</label><input type="email" id="gm-email" value="${existing&&existing.email?existing.email:''}">
+    <button class="btn btn-primary btn-block" id="gm-save" style="margin-top:16px;">حفظ</button>
+  `, (root)=>{
+    root.querySelector('#gm-save').onclick = async ()=>{
+      const payload = { guardian_name: val('gm-name'), relationship: val('gm-rel'), phone: val('gm-phone'), email: val('gm-email')||null };
+      try{
+        let error;
+        if(existing){ ({error} = await sb.from('user_guardians').update(payload).eq('id', existing.id)); }
+        else{ ({error} = await sb.from('user_guardians').insert({...payload, user_id:S.session.user.id})); }
+        if(error) throw error;
+        closeModal(); toast('تم الحفظ','success'); renderGuardiansList();
+      }catch(e){ toast(friendlyError(e),'error'); }
+    };
+  });
+}
+
+/* =========================================================
+   ADMIN
+========================================================= */
+async function mountAdmin(app){
+  if(!S.isAdmin){ app.innerHTML = `<div class="container">${emptyBox('🚫','غير مصرح','هذه الصفحة مخصصة لمسؤولي المنصة فقط.')}</div>`; return; }
+  app.innerHTML = `<div class="container">
+    <h2>لوحة الإدارة</h2>
+    <div class="section-title"><h3>مراجعة طلبات الزواج</h3></div>
+    <div id="admin-req-list">${loadingBox()}</div>
+    <div class="section-title"><h3>وحدات أخرى</h3></div>
+    <div class="grid grid-3">
+      ${['إدارة المستخدمين','التحقق من الحسابات','البلاغات','مراقبة الرسائل','سجل النشاط','إدارة المسؤولين'].map(t=>`
+        <div class="card coming-soon center"><h4>${t}</h4><span class="badge badge-muted">قريبًا</span></div>`).join('')}
+    </div>
+  </div>`;
+  await renderAdminRequests();
+}
+async function renderAdminRequests(){
+  const list = document.getElementById('admin-req-list');
+  if(!S.adminPerms['requests.view'] && !S.adminPerms['requests.review']){
+    list.innerHTML = emptyBox('🔒','لا تملك صلاحية','تحتاج صلاحية requests.view أو requests.review لعرض هذا القسم.');
+    return;
+  }
+  try{
+    const {data: reviews, error} = await sb.from('marriage_request_reviews').select('*').eq('decision','pending').order('created_at');
+    if(error) throw error;
+    if(!reviews.length){ list.innerHTML = emptyBox('✅','لا توجد طلبات بانتظار المراجعة','كل الطلبات تمت مراجعتها حتى الآن.'); return; }
+    const {data: reqs, error:e2} = await sb.from('marriage_requests').select('*').in('id', reviews.map(r=>r.request_id));
+    if(e2) throw e2;
+    const reqMap = Object.fromEntries(reqs.map(r=>[r.id,r]));
+    list.innerHTML = reviews.map(rv=>{
+      const r = reqMap[rv.request_id]; if(!r) return '';
+      return `<div class="card card-tight" style="margin-bottom:10px;">
+        <p class="mb0"><strong>رقم الطلب:</strong> <span class="muted">${r.id}</span></p>
+        <p class="mb0"><strong>المرسل (UUID):</strong> <span class="muted">${r.sender_id}</span></p>
+        <p class="mb0"><strong>المستقبل (UUID):</strong> <span class="muted">${r.recipient_id}</span></p>
+        <p class="mb0"><strong>تاريخ الإرسال:</strong> ${new Date(r.created_at).toLocaleString('ar-EG')}</p>
+        ${S.adminPerms['requests.review']? `
+        <div class="flex gap8" style="margin-top:10px;">
+          <button class="btn btn-success btn-sm" data-approve="${r.id}">اعتماد</button>
+          <button class="btn btn-danger btn-sm" data-reject="${r.id}">رفض</button>
+        </div>` : `<p class="hint">تملك صلاحية العرض فقط، وليس المراجعة.</p>`}
+      </div>`;
+    }).join('');
+    list.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>{
+      confirmModal('اعتماد الطلب','هل تعتمد هذا الطلب لإرساله للطرف المستقبل؟','اعتماد', async ()=>{
+        try{ await api.adminReview(b.dataset.approve,'approved'); toast('تم الاعتماد','success'); renderAdminRequests(); }
+        catch(e){ toast(friendlyError(e),'error'); }
+      });
+    });
+    list.querySelectorAll('[data-reject]').forEach(b=>b.onclick=()=>{
+      openModal(`<h3>سبب الرفض</h3><textarea id="rej-reason" placeholder="اذكر سبب الرفض (اختياري)"></textarea>
+        <div class="flex gap8" style="justify-content:flex-end; margin-top:14px;">
+          <button class="btn btn-ghost" id="rej-cancel">إلغاء</button><button class="btn btn-danger" id="rej-ok">تأكيد الرفض</button>
+        </div>`, (root)=>{
+        root.querySelector('#rej-cancel').onclick = closeModal;
+        root.querySelector('#rej-ok').onclick = async ()=>{
+          const reason = document.getElementById('rej-reason').value.trim();
+          closeModal();
+          try{ await api.adminReview(b.dataset.reject,'rejected',reason||null); toast('تم الرفض','success'); renderAdminRequests(); }
+          catch(e){ toast(friendlyError(e),'error'); }
+        };
+      });
+    });
+  }catch(e){ list.innerHTML = errorBox(e); }
+}
+
+/* =========================================================
+   18. INITIALIZATION — session bootstrap, avoids infinite loading
+========================================================= */
+async function bootAfterAuth(session){
+  S.session = session;
+  await loadAccountContext();
+}
+let authListenerFired = false;
+sb.auth.onAuthStateChange(async (event, session)=>{
+  if(event==='SIGNED_OUT'){
+    Object.assign(S, {session:null, account:null, profile:null, profileStatus:null, prefStatus:null, isAdmin:false, adminPerms:{}});
+    if(S.booted) render();
+    return;
+  }
+  if(session){
+    S.session = session;
+    if(S.booted){ await loadAccountContext(); render(); }
+  }
+});
+
+(async function init(){
+  try{
+    const {data:{session}} = await sb.auth.getSession();
+    if(session){ await bootAfterAuth(session); }
+  }catch(e){ console.error(e); }
+  finally{
+    S.booted = true;
+    render();
+  }
+})();
+// safety net: never leave the user stuck on nothing
+setTimeout(()=>{ if(!S.booted){ S.booted = true; render(); } }, 6000);
+</script>
+</body>
+</html>
