@@ -283,6 +283,13 @@ textarea{min-height:110px;}
 .auth-card .auth-mark{font-size:34px;margin-bottom:10px;}
 .auth-card h2{font-size:28px;}
 .auth-note{padding:12px 14px;background:var(--c-surface-2);border-radius:12px;margin:14px 0;font-size:13px;color:var(--c-text-muted);}
+.otp-boxes{display:flex;gap:8px;justify-content:center;direction:ltr;margin:18px 0 6px;}
+.otp-box{width:44px;height:52px;text-align:center;font-size:22px;font-weight:900;border:1.5px solid var(--c-border);border-radius:10px;background:var(--c-bg);color:var(--c-text);}
+.otp-box:focus{outline:none;border-color:var(--c-primary);}
+.otp-box.otp-err{border-color:var(--c-danger);}
+.otp-countdown{text-align:center;font-size:13px;color:var(--c-text-muted);margin-top:4px;}
+.otp-resend-link{color:var(--c-primary);font-weight:800;cursor:pointer;}
+.otp-resend-link.disabled{color:var(--c-text-muted);cursor:default;pointer-events:none;}
 .dashboard-hero{padding:26px;border-radius:22px;background:linear-gradient(135deg,var(--c-primary),var(--c-primary-light));color:#fff;position:relative;overflow:hidden;}
 .dashboard-hero p{color:rgba(255,255,255,.78);}
 .dashboard-hero .member-pill{display:inline-flex;padding:7px 11px;border-radius:999px;background:rgba(255,255,255,.14);font-size:12px;}
@@ -353,6 +360,9 @@ function getAuthRedirectUrl(){
   const path = window.location.pathname || '/';
   return origin && origin !== 'null' ? origin + path : window.location.href.split('#')[0];
 }
+// Email confirmation now uses a numeric OTP typed into the app (auth.verifyOtp), never a clicked link.
+// detectSessionInUrl/flowType are left as-is for OAuth-style flows elsewhere in the app; they are irrelevant
+// to the OTP screen since no session token ever travels through the URL for signup confirmation anymore.
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' }
 });
@@ -373,7 +383,9 @@ const S = {
   booted: false,
   route: '/',
   params: {},
-  authBusy: false
+  authBusy: false,
+  // Email OTP confirmation flow (replaces confirmation-link flow)
+  otp: null // { email, purpose: 'register'|'login' } while the OTP screen is active
 };
 
 const LABELS = {
@@ -420,10 +432,13 @@ function toast(msg, type='info'){
 function friendlyError(err){
   const m = (err && err.message) ? err.message : String(err||'حدث خطأ غير متوقع');
   const code = err && err.code;
-  if(code==='email_not_confirmed' || /Email not confirmed|email.*not.*confirmed/i.test(m)) return 'لم يتم تأكيد بريدك الإلكتروني بعد. افتح رسالة التأكيد واضغط الرابط قبل تسجيل الدخول.';
+  if(code==='email_not_confirmed' || /Email not confirmed|email.*not.*confirmed/i.test(m)) return 'البريد الإلكتروني غير مؤكد. أرسلنا لك كود تأكيد.';
   if(code==='invalid_credentials' || /Invalid login credentials/i.test(m)) return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
   if(code==='user_already_exists' || /already registered|user already registered/i.test(m)) return 'هذا البريد الإلكتروني مسجل بالفعل.';
   if(/Password should be at least|password.*(short|characters|length)|weak password/i.test(m)) return 'كلمة المرور قصيرة أو ضعيفة. استخدم كلمة مرور من 6 أحرف على الأقل.';
+  if(code==='otp_expired' || /Token has expired or is invalid/i.test(m)) return 'الكود غير صحيح أو منتهي الصلاحية. اطلب كودًا جديدًا وحاول مجددًا.';
+  if(code==='over_email_send_rate_limit' || /security purposes|only request this after|rate limit/i.test(m)) return 'لقد طلبت الكود عدة مرات. الرجاء الانتظار قليلًا قبل إعادة المحاولة.';
+  if(/Signups not allowed|signup is disabled/i.test(m)) return 'التسجيل غير متاح حاليًا.';
   if(/permission denied for function|get_candidate_profiles/i.test(m)) return 'تعذر الوصول إلى البحث عن المرشحين بسبب صلاحيات قاعدة البيانات. لم يتم تجاوز الحماية.';
   if(/JWT|not authenticated|Auth session missing/i.test(m)) return 'انتهت صلاحية الجلسة، الرجاء تسجيل الدخول مرة أخرى.';
   if(/Failed to fetch|NetworkError|network/i.test(m)) return 'تعذر الاتصال بالخادم، تحقق من اتصال الإنترنت.';
@@ -474,22 +489,27 @@ const api = {
 /* =========================================================
    4. AUTH
 ========================================================= */
+// signUp() intentionally has NO emailRedirectTo / redirect options: we never want Supabase's
+// confirmation-link flow to be the mechanism the user relies on. With "Confirm email" ON in the
+// project's Auth settings, Supabase creates the account as unconfirmed and — as long as the Confirm
+// signup email template contains {{ .Token }} — sends a 6-digit numeric code to that same address.
 async function doSignUp(email, password){
-  const emailRedirectTo = getAuthRedirectUrl();
-  const {data, error} = await sb.auth.signUp({
-    email,
-    password,
-    options: { emailRedirectTo }
-  });
+  const {data, error} = await sb.auth.signUp({ email, password });
   if(error) throw error;
   return data;
 }
-async function resendConfirmation(email){
-  const {data, error} = await sb.auth.resend({
-    type: 'signup',
-    email,
-    options: { emailRedirectTo: getAuthRedirectUrl() }
-  });
+// Verifies the 6-digit code the user typed in. type:'email' is the current (non-deprecated) OTP type
+// for both signup and sign-in confirmation in supabase-js v2 ('signup' is accepted but deprecated).
+// On success this returns a real session — no separate sign-in call is needed afterwards.
+async function verifyEmailOtp(email, token){
+  const {data, error} = await sb.auth.verifyOtp({ email, token, type: 'email' });
+  if(error) throw error;
+  return data;
+}
+// Resends the signup OTP. type:'signup' is resend()'s own (separate) type enum — distinct from
+// verifyOtp's type:'email' above. No emailRedirectTo here either.
+async function resendSignupOtp(email){
+  const {data, error} = await sb.auth.resend({ type: 'signup', email });
   if(error) throw error;
   return data;
 }
@@ -497,6 +517,25 @@ async function doSignIn(email, password){
   const {data, error} = await sb.auth.signInWithPassword({ email, password });
   if(error) throw error;
   return data;
+}
+
+/* ---- OTP resend cooldown (client-side anti-spam; server also rate-limits) ---- */
+const OTP_COOLDOWN_SECONDS = 60;
+function otpCooldownKey(email){ return 'mawadda_otp_cd_' + email.trim().toLowerCase(); }
+function setOtpCooldown(email, seconds){
+  try{ localStorage.setItem(otpCooldownKey(email), String(Date.now() + (seconds||OTP_COOLDOWN_SECONDS)*1000)); }catch(e){}
+}
+function getOtpCooldownRemaining(email){
+  try{
+    const until = parseInt(localStorage.getItem(otpCooldownKey(email))||'0',10);
+    return Math.max(0, Math.ceil((until - Date.now())/1000));
+  }catch(e){ return 0; }
+}
+function clearOtpCooldown(email){ try{ localStorage.removeItem(otpCooldownKey(email)); }catch(e){} }
+// Starts (or resumes, after a refresh) the OTP-entry screen for an email.
+function startOtpFlow(email, purpose){
+  S.otp = { email, purpose };
+  navigate('/verify-otp');
 }
 async function doSignOut(){
   await sb.auth.signOut();
@@ -532,7 +571,7 @@ async function ensureGeo(){
 /* =========================================================
    5. ROUTER / VIEW MANAGER
 ========================================================= */
-const PUBLIC_ROUTES = ['/','/login','/register','/discovery'];
+const PUBLIC_ROUTES = ['/','/login','/register','/discovery','/verify-otp'];
 const PUBLIC_PREFIXES = ['/candidate/'];
 function currentHash(){ return location.hash.replace(/^#/,'') || '/'; }
 function navigate(path){ location.hash = path; }
@@ -548,7 +587,7 @@ async function render(){
 
   const loggedIn = !!S.session;
   if(!loggedIn && !PUBLIC_ROUTES.includes(path) && !PUBLIC_PREFIXES.some(p=>path.startsWith(p))){ navigate('/login'); return; }
-  if(loggedIn && ['/login','/register'].includes(path)){ navigate('/dashboard'); return; }
+  if(loggedIn && ['/login','/register','/verify-otp'].includes(path)){ navigate('/dashboard'); return; }
 
   document.getElementById('site-header').style.display = loggedIn ? 'block':'block';
   renderHeader();
@@ -564,6 +603,9 @@ async function render(){
       case '': case 'landing': app.innerHTML = loggedIn ? loadingBox() : viewLanding(); if(loggedIn) navigate('/dashboard'); break;
       case 'login': app.innerHTML = viewLogin(); mountAuthForm('login'); break;
       case 'register': app.innerHTML = viewRegister(); mountAuthForm('register'); break;
+      case 'verify-otp':
+        if(!S.otp || !S.otp.email){ navigate('/register'); return; }
+        app.innerHTML = viewVerifyOtp(); mountVerifyOtp(); break;
       case 'dashboard': await mountDashboard(app); break;
       case 'profile': await mountProfile(app); break;
       case 'preferences': await mountPreferences(app); break;
@@ -708,19 +750,26 @@ function mountAuthForm(mode){
     try{
       if(mode==='register'){
         const data = await doSignUp(email, password);
-        // With Confirm Email enabled, Supabase should return no session. Never force-login here.
-        if(data.session){
-          // Defensive only: do not treat a returned session as confirmed unless user.email_confirmed_at exists.
-          const confirmed = !!data.session.user?.email_confirmed_at;
-          if(confirmed){ await bootAfterAuth(data.session); toast('تم إنشاء الحساب وتأكيد البريد.','success'); navigate('/dashboard'); }
-          else { await sb.auth.signOut(); toast('تم إنشاء الحساب. افتح بريدك الإلكتروني واضغط على رابط تأكيد الحساب.','success'); navigate('/login'); }
-        } else {
-          errBox.innerHTML = `<div class="auth-success"><strong>تم إنشاء الحساب.</strong><br>افتح بريدك الإلكتروني واضغط على رابط تأكيد الحساب.<br><button class="btn btn-outline btn-sm" id="f-resend-register" style="margin-top:10px;">إعادة إرسال رسالة التأكيد</button></div>`;
-          document.getElementById('f-resend-register').onclick = async ()=>{
-            try{ await resendConfirmation(email); toast('تم إرسال رسالة التأكيد مرة أخرى إلى بريدك الإلكتروني.','success'); }
-            catch(re){ toast(friendlyError(re),'error'); }
-          };
+        // Anti-enumeration: if this email is already registered & confirmed, Supabase returns a
+        // user object with an EMPTY identities array and sends no email at all. Detect that and
+        // send the person to login instead of parking them on an OTP screen that will never fill.
+        if(data.user && Array.isArray(data.user.identities) && data.user.identities.length===0){
+          errBox.innerHTML = `<p class="field-error">هذا البريد الإلكتروني مسجل بالفعل. جرّب تسجيل الدخول.</p>`;
+          return;
         }
+        // Confirm Email is ON for this project, so signUp() must not return a live session.
+        // Defensive-only: if it ever does (e.g. Confirm Email were switched off), never silently
+        // treat that as "confirmed" — only trust an explicit email_confirmed_at.
+        if(data.session && data.session.user?.email_confirmed_at){
+          await bootAfterAuth(data.session);
+          toast('تم إنشاء الحساب وتأكيد البريد.','success');
+          navigate('/dashboard');
+          return;
+        }
+        if(data.session){ await sb.auth.signOut(); }
+        setOtpCooldown(email); // signUp already triggered the first OTP email
+        toast('تم إنشاء حسابك بنجاح. أرسلنا كود تأكيد مكوّنًا من 6 أرقام إلى بريدك الإلكتروني.','success');
+        startOtpFlow(email, 'register');
       } else {
         const data = await doSignIn(email, password);
         if(!data.session || !data.session.user?.email_confirmed_at){
@@ -733,17 +782,145 @@ function mountAuthForm(mode){
       }
     }catch(e){
       const isUnconfirmed = (e && e.code==='email_not_confirmed') || /Email not confirmed/i.test((e&&e.message)||'');
-      errBox.innerHTML = `<p class="field-error">${friendlyError(e)}</p>${(mode!=='register'&&isUnconfirmed)?`<p><a id="f-resend-confirm" style="color:var(--c-primary); font-weight:700; cursor:pointer;">إعادة إرسال رابط التأكيد</a></p>`:''}`;
       if(mode!=='register' && isUnconfirmed){
-        const resendLink = document.getElementById('f-resend-confirm');
-        if(resendLink) resendLink.onclick = async ()=>{
-          try{ await resendConfirmation(email); toast('تم إرسال رابط التأكيد من جديد، تحقق من بريدك.','success'); }
-          catch(re){ toast(friendlyError(re),'error'); }
+        errBox.innerHTML = `<div class="auth-success"><strong>البريد الإلكتروني غير مؤكد.</strong> أرسلنا لك كود تأكيد.<br><button class="btn btn-outline btn-sm" id="f-send-otp-login" style="margin-top:10px;">إرسال كود جديد</button></div>`;
+        document.getElementById('f-send-otp-login').onclick = async ()=>{
+          try{
+            await resendSignupOtp(email);
+            setOtpCooldown(email);
+            toast('تم إرسال كود جديد إلى بريدك الإلكتروني.','success');
+            startOtpFlow(email, 'login');
+          }catch(re){ toast(friendlyError(re),'error'); }
         };
+      } else {
+        errBox.innerHTML = `<p class="field-error">${friendlyError(e)}</p>`;
       }
     }finally{
       btn.disabled = false; btn.textContent = mode==='register' ? 'إنشاء الحساب':'دخول';
     }
+  };
+}
+
+/* =========================================================
+   PUBLIC — Email OTP verification screen
+========================================================= */
+function viewVerifyOtp(){
+  const email = S.otp ? S.otp.email : '';
+  return `<div class="auth-shell"><div class="auth-card">
+    <div class="auth-mark">🔐</div><div class="eyebrow">خطوة أخيرة</div><h2>تأكيد البريد الإلكتروني</h2>
+    <p>تم إنشاء حسابك بنجاح.<br>أرسلنا كود تأكيد مكوّنًا من 6 أرقام إلى بريدك الإلكتروني:<br><strong style="color:var(--c-text);">${email}</strong></p>
+    <div id="otp-error"></div>
+    <div class="otp-boxes" id="otp-boxes">
+      ${Array.from({length:6}).map((_,i)=>`<input class="otp-box" id="otp-${i}" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="${i===0?'one-time-code':'off'}">`).join('')}
+    </div>
+    <button class="btn btn-primary btn-block" id="otp-confirm" style="margin-top:14px;">تأكيد الكود</button>
+    <div class="otp-countdown" id="otp-countdown-wrap">
+      <span class="otp-resend-link" id="otp-resend">إعادة إرسال الكود</span>
+    </div>
+    <div class="auth-note">
+      كتبت بريدًا خاطئًا؟
+      <a id="otp-change-email" style="color:var(--c-primary); font-weight:800; cursor:pointer;">عدّل البريد الإلكتروني وعد للتسجيل</a>
+    </div>
+  </div></div>`;
+}
+
+function mountVerifyOtp(){
+  if(!S.otp || !S.otp.email){ navigate('/register'); return; }
+  const email = S.otp.email;
+  const purpose = S.otp.purpose;
+  const boxes = Array.from({length:6}, (_,i)=>document.getElementById('otp-'+i));
+  const errBox = document.getElementById('otp-error');
+  const confirmBtn = document.getElementById('otp-confirm');
+  const resendEl = document.getElementById('otp-resend');
+  const countdownWrap = document.getElementById('otp-countdown-wrap');
+
+  boxes[0].focus();
+  boxes.forEach((box,i)=>{
+    box.addEventListener('input', ()=>{
+      box.value = box.value.replace(/[^0-9]/g,'').slice(0,1);
+      box.classList.remove('otp-err');
+      if(box.value && i<5) boxes[i+1].focus();
+    });
+    box.addEventListener('keydown', (e)=>{
+      if(e.key==='Backspace' && !box.value && i>0){ boxes[i-1].focus(); }
+    });
+    box.addEventListener('paste', (e)=>{
+      const text = (e.clipboardData||window.clipboardData).getData('text').replace(/[^0-9]/g,'');
+      if(!text) return;
+      e.preventDefault();
+      text.slice(0,6).split('').forEach((ch,idx)=>{ if(boxes[idx]){ boxes[idx].value = ch; } });
+      const next = Math.min(text.length,6)-1;
+      if(boxes[next]) boxes[next].focus();
+    });
+  });
+
+  function markInvalid(){ boxes.forEach(b=>b.classList.add('otp-err')); }
+  function collectCode(){ return boxes.map(b=>b.value).join(''); }
+
+  async function doConfirm(){
+    const code = collectCode();
+    errBox.innerHTML='';
+    if(code.length!==6){ errBox.innerHTML = `<p class="field-error">أدخل الكود المكوّن من 6 أرقام كاملًا.</p>`; markInvalid(); return; }
+    confirmBtn.disabled = true; confirmBtn.textContent='جارٍ التحقق…';
+    try{
+      const data = await verifyEmailOtp(email, code);
+      if(!data.session){ throw new Error('لم يتم إنشاء الجلسة، حاول مرة أخرى.'); }
+      clearOtpCooldown(email);
+      S.otp = null;
+      await bootAfterAuth(data.session);
+      toast('تم تأكيد بريدك الإلكتروني بنجاح.','success');
+      // Continue into the app's existing post-auth flow (dashboard nudges profile completion).
+      navigate('/dashboard');
+    }catch(e){
+      errBox.innerHTML = `<p class="field-error">${friendlyError(e)}</p>`;
+      markInvalid();
+      boxes.forEach(b=>b.value='');
+      boxes[0].focus();
+    }finally{
+      confirmBtn.disabled = false; confirmBtn.textContent='تأكيد الكود';
+    }
+  }
+  confirmBtn.onclick = doConfirm;
+
+  let timer = null;
+  function renderCountdown(){
+    const remaining = getOtpCooldownRemaining(email);
+    if(remaining<=0){
+      resendEl.textContent = 'إعادة إرسال الكود';
+      resendEl.classList.remove('disabled');
+      resendEl.onclick = doResend;
+      if(timer){ clearInterval(timer); timer=null; }
+      return;
+    }
+    const mm = String(Math.floor(remaining/60)).padStart(2,'0');
+    const ss = String(remaining%60).padStart(2,'0');
+    resendEl.textContent = `إعادة الإرسال بعد ${mm}:${ss}`;
+    resendEl.classList.add('disabled');
+    resendEl.onclick = null;
+  }
+  async function doResend(){
+    resendEl.classList.add('disabled');
+    try{
+      await resendSignupOtp(email);
+      setOtpCooldown(email);
+      toast('تم إرسال كود جديد إلى بريدك الإلكتروني.','success');
+      boxes.forEach(b=>{ b.value=''; b.classList.remove('otp-err'); });
+      boxes[0].focus();
+    }catch(e){
+      toast(friendlyError(e),'error');
+      // If the server itself rate-limited us, keep the button disabled a bit so we don't hammer it.
+      if(getOtpCooldownRemaining(email)<=0) setOtpCooldown(email, 30);
+    }finally{
+      renderCountdown();
+    }
+  }
+  renderCountdown();
+  timer = setInterval(renderCountdown, 1000);
+
+  document.getElementById('otp-change-email').onclick = ()=>{
+    if(timer){ clearInterval(timer); timer=null; }
+    S.otp = null;
+    navigate('/register');
   };
 }
 
