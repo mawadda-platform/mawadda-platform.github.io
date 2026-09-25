@@ -2443,20 +2443,26 @@ function openGuardianModal(existing){
 ========================================================= */
 async function mountAdmin(app){
   if(!S.isAdmin){app.innerHTML=`<div class="container">${emptyBox('🚫','غير مصرح','هذه الصفحة مخصصة لمسؤولي المنصة فقط.')}</div>`;return;}
-  let superAdmin=false; try{ superAdmin=await api.isSuperAdmin(); }catch(e){}
+  // Visibility follows the real permission system (has_admin_permission('admins.manage'),
+  // already loaded into S.adminPerms at login) — the same check admin_grant_role()/
+  // admin_revoke_role()/admin_search_users_basic() enforce server-side. Not tied to
+  // is_super_admin(): any admin explicitly granted admins.manage can reach this section,
+  // matching what the backend already allows. superAdmin is only used below to decide
+  // whether to additionally show the SUPER_ADMIN protection note.
+  const canManageAdmins = !!S.adminPerms['admins.manage'];
   app.innerHTML=`<div class="container">
     <div class="page-heading"><div><div class="eyebrow">Administration</div><h2>لوحة الإدارة</h2><p class="mb0">إدارة الطلبات والسلامة والبلاغات والتنبيهات والصلاحيات.</p></div></div>
     <div class="admin-nav"><div class="admin-group"><h4>Management</h4><p class="mb0">طلبات الزواج والمستخدمون.</p></div><div class="admin-group"><h4>Safety</h4><p class="mb0">البلاغات والتنبيهات والإيقاف.</p></div><div class="admin-group"><h4>Contact</h4><p class="mb0">مراجعة كشف بيانات الاتصال بعد القبول المتبادل.</p></div><div class="admin-group"><h4>Audit</h4><p class="mb0">التغييرات الحساسة تسجل في سجل التدقيق الموجود.</p></div></div>
     <div class="section-title"><h3>طلبات الزواج بانتظار المراجعة</h3></div><div id="admin-req-list">${loadingBox()}</div>
     ${S.adminPerms['messages.moderate'] ? `<div class="section-title"><h3>محادثات الأعضاء</h3></div><div class="grid grid-2"><div id="admin-chat-thread-list">${loadingBox()}</div><div id="admin-chat-messages-panel" class="card"><p class="muted">اختر محادثة من القائمة.</p></div></div>` : ''}
-    ${superAdmin ? `<div class="section-title"><h3>إدارة المشرفين</h3></div><div class="card"><div class="flex-between"><h4 class="mb0">بحث بالاسم أو البريد أو Member Code</h4></div><div class="flex gap8" style="margin-top:10px;"><input type="text" id="am-search" placeholder="الاسم / البريد / MW-...." style="flex:1;"><button class="btn btn-outline btn-sm" id="am-search-btn">بحث</button></div><div id="am-search-results" style="margin-top:12px;"></div></div><div class="section-title"><h3>المشرفون الحاليون</h3></div><div id="am-admins-list">${loadingBox()}</div>`:''}
+    ${canManageAdmins ? `<div class="section-title"><h3>إضافة أدمن / أدمن مساعد</h3></div><div class="card"><div class="flex-between"><h4 class="mb0">ابحث بـ Member Code أو حساب Google / البريد الإلكتروني</h4></div><p class="mb0 muted" style="font-size:12.5px;margin-top:4px;">مخصص لإسناد أحد الأدوار التالية لحساب موجود بالفعل: ADMIN، MODERATOR، VERIFICATION_ADMIN، SUPPORT_ADMIN. لا يمكن من هنا منح أو تعديل SUPER_ADMIN.</p><div class="flex gap8" style="margin-top:10px;"><input type="text" id="am-search" placeholder="MW-.... أو example@gmail.com" style="flex:1;"><button class="btn btn-outline btn-sm" id="am-search-btn">بحث</button></div><div id="am-search-results" style="margin-top:12px;"></div></div><div class="section-title"><h3>المشرفون الحاليون</h3></div><div id="am-admins-list">${loadingBox()}</div>`:''}
     <div class="section-title"><h3>بلاغات المستخدمين</h3></div><div id="admin-complaints">${loadingBox()}</div>
     <div class="section-title"><h3>التنبيهات الإدارية</h3></div><div id="admin-warnings">${loadingBox()}</div>
     <div class="section-title"><h3>طلبات كشف بيانات الاتصال</h3></div><div id="admin-disclosures">${loadingBox()}</div>
   </div>`;
   await renderAdminRequests();
   if(S.adminPerms['messages.moderate']) await renderAdminChatThreads();
-  if(superAdmin){ mountAdminManagement(); await renderAdminsList(); }
+  if(canManageAdmins){ mountAdminManagement(); await renderAdminsList(); }
   await renderAdminComplaints(); await renderAdminWarnings(); await renderAdminDisclosures();
 }
 
@@ -2542,7 +2548,10 @@ async function renderAdminDisclosures(){
   try{const rows=await api.adminGetContactDisclosures(); if(!rows.length){box.innerHTML=emptyBox('🔒','لا توجد طلبات كشف','ستظهر هنا طلبات الاتصال الناتجة عن القبول المتبادل.');return;} box.innerHTML=rows.map(d=>`<div class="card card-tight" style="margin-bottom:8px;"><div class="flex-between"><strong>${d.beneficiary_member_code}</strong><span class="badge ${d.approval_status==='approved'?'badge-success':d.approval_status==='rejected'?'badge-danger':'badge-warn'}">${d.approval_status}</span></div><p class="mb0">${d.contact_type==='guardian_phone'?'هاتف ولي الأمر':'الهاتف الشخصي'} · Request: ${d.request_id}</p>${d.approval_status==='pending'?`<div class="flex gap8" style="margin-top:8px;"><button class="btn btn-success btn-sm" data-dapprove="${d.id}">اعتماد</button><button class="btn btn-danger btn-sm" data-dreject="${d.id}">رفض</button></div>`:''}</div>`).join(''); box.querySelectorAll('[data-dapprove]').forEach(b=>b.onclick=async()=>{try{await api.adminReviewDisclosure(b.dataset.dapprove,'approved');toast('تم اعتماد كشف الاتصال','success');renderAdminDisclosures();}catch(e){toast(friendlyError(e),'error');}});box.querySelectorAll('[data-dreject]').forEach(b=>b.onclick=()=>{openModal(`<h3>رفض كشف الاتصال</h3><textarea id="dr-reason" placeholder="سبب الرفض"></textarea><div class="flex gap8" style="justify-content:flex-end;margin-top:12px;"><button class="btn btn-ghost" id="dr-cancel">إلغاء</button><button class="btn btn-danger" id="dr-ok">رفض</button></div>`,root=>{root.querySelector('#dr-cancel').onclick=closeModal;root.querySelector('#dr-ok').onclick=async()=>{try{await api.adminReviewDisclosure(b.dataset.dreject,'rejected',val('dr-reason')||null);closeModal();toast('تم رفض كشف الاتصال','success');renderAdminDisclosures();}catch(e){toast(friendlyError(e),'error');}};});});}catch(e){box.innerHTML=errorBox(e);}
 }
 
-const ADMIN_ROLE_CODES = ['SUPER_ADMIN','ADMIN','MODERATOR','VERIFICATION_ADMIN','SUPPORT_ADMIN'];
+// SUPER_ADMIN is intentionally excluded — this panel must never be able to grant or
+// modify it, regardless of the acting admin's own role (admin_grant_role() also
+// enforces this server-side, but it must never even be offered here).
+const ADMIN_ROLE_CODES = ['ADMIN','MODERATOR','VERIFICATION_ADMIN','SUPPORT_ADMIN'];
 
 function mountAdminManagement(){
   const btn = document.getElementById('am-search-btn');
@@ -2553,19 +2562,29 @@ function mountAdminManagement(){
     try{
       const users = await api.adminSearchUsersBasic(input.value.trim());
       if(!users.length){ box.innerHTML = emptyBox('🔍','لا نتائج','لم يتم العثور على مستخدم بهذا المعرف.'); return; }
-      box.innerHTML = users.map(u=>`
-        <div class="card card-tight flex-between" style="margin-bottom:8px;">
-          <div>
-            <p class="mb0"><strong>${u.member_code}</strong>${u.full_name?` · ${u.full_name}`:''}</p>
-            <p class="mb0 muted">${u.email||'—'} · الحالة: ${u.status} — أُنشئ: ${new Date(u.created_at).toLocaleDateString('ar-EG')}</p>
-          </div>
-          <div class="flex gap8">
-            <select class="am-role-select" data-uid="${u.user_id}" style="width:auto;">
+      box.innerHTML = users.map(u=>{
+        const roles = u.admin_roles||[];
+        const isSuper = roles.some(r=>r.role_code==='SUPER_ADMIN');
+        const roleBadges = roles.length ? `<div class="flex gap8" style="margin-top:6px;flex-wrap:wrap;">${roles.map(r=>`<span class="badge ${r.role_code==='SUPER_ADMIN'?'badge-danger':'badge-info'}">${r.role_code}</span>`).join('')}</div>` : '';
+        const assignControls = isSuper
+          ? `<span class="badge badge-danger">SUPER_ADMIN — محمي، لا يمكن تعديله من هنا</span>`
+          : `<select class="am-role-select" data-uid="${u.user_id}" style="width:auto;">
               ${ADMIN_ROLE_CODES.map(rc=>`<option value="${rc}">${rc}</option>`).join('')}
             </select>
-            <button class="btn btn-primary btn-sm am-grant-btn" data-uid="${u.user_id}" data-code="${u.member_code}">تعيين Admin</button>${S.adminPerms['reports.resolve']?`<button class="btn btn-danger btn-sm am-warning-btn" data-uid="${u.user_id}" data-code="${u.member_code}">إنذار</button>`:''}
+            <button class="btn btn-primary btn-sm am-grant-btn" data-uid="${u.user_id}" data-code="${u.member_code}">تعيين دور</button>`;
+        return `
+        <div class="card card-tight flex-between" style="margin-bottom:8px;">
+          <div>
+            <p class="mb0"><strong>Member Code: ${u.member_code}</strong>${u.full_name?` · ${u.full_name}`:''}</p>
+            ${u.google_email ? `<p class="mb0 muted">Google Account: ${u.google_email}</p>` : `<p class="mb0 muted">${u.email||'—'}</p>`}
+            <p class="mb0 muted" style="font-size:12px;">الحالة: ${u.status} — أُنشئ: ${new Date(u.created_at).toLocaleDateString('ar-EG')}</p>
+            ${roleBadges}
           </div>
-        </div>`).join('');
+          <div class="flex gap8" style="flex-wrap:wrap;align-items:center;">
+            ${assignControls}${S.adminPerms['reports.resolve']?`<button class="btn btn-danger btn-sm am-warning-btn" data-uid="${u.user_id}" data-code="${u.member_code}">إنذار</button>`:''}
+          </div>
+        </div>`;
+      }).join('');
       box.querySelectorAll('.am-warning-btn').forEach(b=>b.onclick=()=>{
     openModal(`<h3>إصدار تنبيه إداري</h3><p>الحساب: <strong>${b.dataset.code}</strong></p><label>السبب</label><input type="text" id="aw-reason" maxlength="300"><label>الأدلة / الملاحظات</label><textarea id="aw-evidence" maxlength="5000"></textarea><div class="flex gap8" style="justify-content:flex-end;margin-top:12px;"><button class="btn btn-ghost" id="aw-cancel">إلغاء</button><button class="btn btn-danger" id="aw-ok">إصدار</button></div>`,root=>{root.querySelector('#aw-cancel').onclick=closeModal;root.querySelector('#aw-ok').onclick=async()=>{const reason=val('aw-reason');if(!reason){toast('اكتب سبب التنبيه','error');return;}try{await api.adminIssueWarning(b.dataset.uid,reason,val('aw-evidence')||null,null);closeModal();toast('تم إصدار التنبيه','success');}catch(e){toast(friendlyError(e),'error');}};});
   });
@@ -2590,14 +2609,20 @@ async function renderAdminsList(){
   try{
     const admins = await api.adminListAdmins();
     if(!admins.length){ list.innerHTML = emptyBox('🛡️','لا يوجد مشرفون بعد','استخدم البحث أعلاه لتعيين أول مشرف.'); return; }
-    list.innerHTML = admins.map(a=>`
+    list.innerHTML = admins.map(a=>{
+      const isSuper = a.role_code==='SUPER_ADMIN';
+      return `
       <div class="card card-tight flex-between" style="margin-bottom:8px;">
         <div>
-          <p class="mb0"><strong>${a.member_code}</strong> <span class="badge badge-info">${a.role_code}</span></p>
+          <p class="mb0"><strong>Member Code: ${a.member_code}</strong> <span class="badge ${isSuper?'badge-danger':'badge-info'}">${a.role_code}</span></p>
+          ${a.google_email ? `<p class="mb0 muted">Google Account: ${a.google_email}</p>` : ''}
           <p class="mb0 muted">مُنح بتاريخ: ${new Date(a.granted_at).toLocaleDateString('ar-EG')}</p>
         </div>
-        <button class="btn btn-danger btn-sm am-revoke-btn" data-uid="${a.user_id}" data-code="${a.role_code}" data-member="${a.member_code}">إزالة</button>
-      </div>`).join('');
+        ${isSuper
+          ? `<span class="badge badge-danger">محمي — لا يمكن إزالته من هنا</span>`
+          : `<button class="btn btn-danger btn-sm am-revoke-btn" data-uid="${a.user_id}" data-code="${a.role_code}" data-member="${a.member_code}">إزالة</button>`}
+      </div>`;
+    }).join('');
     list.querySelectorAll('.am-revoke-btn').forEach(b=>b.onclick=()=>{
       confirmModal('إزالة دور إداري', `هل تريد إزالة الدور <strong>${b.dataset.code}</strong> من <strong>${b.dataset.member}</strong>؟`, 'إزالة', async ()=>{
         try{ await api.adminRevokeRole(b.dataset.uid, b.dataset.code); toast('تمت الإزالة','success'); await renderAdminsList(); }
