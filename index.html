@@ -278,6 +278,10 @@ textarea{min-height:110px;}
 .cta-band p{color:rgba(255,255,255,.78);margin:3px 0 0;}
 .cta-band .btn-outline{background:transparent;color:#fff;border-color:rgba(255,255,255,.45);}
 .site-footer{border-top:1px solid var(--c-border);padding:28px 0;color:var(--c-text-muted);}
+.footer-grid{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;}
+.footer-links{display:flex;flex-wrap:wrap;gap:16px;font-size:14px;}
+.footer-links a{text-decoration:none;}
+.footer-links a:hover{color:var(--c-primary);}
 .auth-shell{min-height:calc(100vh - 68px);display:grid;place-items:center;padding:28px 14px;}
 .auth-card{width:min(100%,520px);background:var(--c-surface);border:1px solid var(--c-border);border-radius:22px;padding:28px;box-shadow:var(--shadow-lg);}
 .auth-card .auth-mark{font-size:34px;margin-bottom:10px;}
@@ -646,7 +650,7 @@ async function ensureGeo(){
 /* =========================================================
    5. ROUTER / VIEW MANAGER
 ========================================================= */
-const PUBLIC_ROUTES = ['/','/login','/register','/discovery','/verify-otp','/forgot-password','/reset-password'];
+const PUBLIC_ROUTES = ['/','/login','/register','/discovery','/verify-otp','/forgot-password','/reset-password','/privacy','/contact'];
 const PUBLIC_PREFIXES = ['/candidate/'];
 function currentHash(){ return location.hash.replace(/^#/,'') || '/'; }
 function navigate(path){ location.hash = path; }
@@ -682,6 +686,8 @@ async function render(){
         if(!S.otp || !S.otp.email){ navigate('/login'); return; }
         app.innerHTML = viewVerifyOtp(); mountVerifyOtp(); break;
       case 'forgot-password': app.innerHTML = viewForgotPassword(); mountForgotPassword(); break;
+      case 'privacy': app.innerHTML = viewPrivacy(); mountStaticPage(); break;
+      case 'contact': app.innerHTML = viewContact(); mountStaticPage(); break;
       case 'reset-password':
         if(!S.recovery || !S.recovery.email){ navigate('/forgot-password'); return; }
         app.innerHTML = viewResetPassword(); mountResetPassword(); break;
@@ -792,8 +798,46 @@ function viewLanding(){
       </div>
       <div class="cta-band"><div><h3 style="color:#fff;margin-bottom:3px;">ابدأ من المكان المناسب لك</h3><p>تصفح أولًا أو أنشئ حسابك للانتقال إلى الوظائف الخاصة.</p></div><div class="hero-actions"><button class="btn btn-primary" style="background:#fff;color:var(--c-primary)" data-nav="/register">إنشاء حساب</button><button class="btn btn-outline" data-nav="/discovery">تصفح المرشحين</button></div></div>
     </section>
-    <footer class="site-footer"><div class="wrap"><strong>مودة</strong> · منصة زواج جادة ومحترمة.</div></footer>
+    ${siteFooter()}
   </main>`;
+}
+function siteFooter(){
+  return `<footer class="site-footer"><div class="wrap footer-grid">
+    <div><strong>مودة</strong> · منصة زواج جادة ومحترمة.</div>
+    <div class="footer-links">
+      <a style="color:var(--c-text-muted);font-weight:700;cursor:pointer;" data-nav="/discovery">استكشاف</a>
+      <a style="color:var(--c-text-muted);font-weight:700;cursor:pointer;" data-nav="/privacy">الخصوصية والأمان</a>
+      <a style="color:var(--c-text-muted);font-weight:700;cursor:pointer;" data-nav="/contact">تواصل معنا</a>
+    </div>
+  </div></footer>`;
+}
+function viewPrivacy(){
+  return `<div class="container narrow">
+    <div class="page-heading"><div><div class="eyebrow">سياسة المنصة</div><h2>الخصوصية والأمان</h2></div></div>
+    <div class="profile-section"><h3>ما يراه الزائر غير المسجل</h3><p>التصفح العام يعرض فقط بيانات غير حساسة (العمر التقريبي، المحافظة، المؤهل الدراسي، الحالة الاجتماعية، الصفات) عبر واجهات عامة مخصصة لذلك. لا يتم عرض الهاتف أو البريد الإلكتروني أو أي بيانات حساسة لأي زائر أو عضو من خلال صفحات الاستكشاف أو الملف الشخصي.</p></div>
+    <div class="profile-section"><h3>التواصل بين الأعضاء</h3><p>لا يوجد تواصل مباشر أو تبادل بيانات اتصال بين الأعضاء داخل المنصة. كل تواصل يبدأ بطلب زواج يمر أولًا بمراجعة إدارية قبل وصوله للطرف الآخر.</p></div>
+    <div class="profile-section"><h3>الحسابات والدخول</h3><p>يتطلب إنشاء الحساب تأكيد البريد الإلكتروني. تدعم المنصة تسجيل الدخول عبر البريد وكلمة المرور أو عبر Google، ولا تُستخدم أي جهة خارجية أخرى لتسجيل الدخول.</p></div>
+    <div class="profile-section"><h3>صلاحيات البيانات</h3><p>الوصول إلى البيانات الحساسة والوظائف الإدارية مقيّد بصلاحيات محددة على مستوى قاعدة البيانات، ولا يُمنح الدور الكامل (service role) لواجهة المستخدم في أي حال.</p></div>
+    <p class="center" style="margin-top:14px;"><a style="color:var(--c-primary);font-weight:800;cursor:pointer;" data-nav="/">العودة للرئيسية</a></p>
+  </div>`;
+}
+function viewContact(){
+  return `<div class="container narrow">
+    <div class="page-heading"><div><div class="eyebrow">تواصل معنا</div><h2>الدعم والتواصل مع الإدارة</h2></div></div>
+    <div class="profile-section">
+      <h3>حالة قناة التواصل حاليًا</h3>
+      <p>نظام الدردشة المباشرة بين الأعضاء والإدارة لم يُفعَّل بعد داخل المنصة. حتى إتاحته، يتم التواصل مع الإدارة بشكل غير مباشر عبر مسارات موجودة فعليًا في النظام:</p>
+      <ul style="margin:10px 0 0;padding-inline-start:20px;line-height:2;">
+        <li>طلبات الزواج التي ترسلها تمر تلقائيًا على مراجعة الإدارة قبل وصولها للطرف الآخر.</li>
+        <li>بيانات الأولياء التي تسجّلها في حسابك متاحة للإدارة ضمن صلاحياتها لمتابعة الطلبات.</li>
+      </ul>
+      <p style="margin-top:10px;">سنضيف قناة تواصل مباشرة هنا فور تنفيذها فعليًا في قاعدة البيانات، دون استخدام بيانات وهمية إلى أن يحدث ذلك.</p>
+    </div>
+    <p class="center" style="margin-top:14px;"><a style="color:var(--c-primary);font-weight:800;cursor:pointer;" data-nav="/">العودة للرئيسية</a></p>
+  </div>`;
+}
+function mountStaticPage(){
+  document.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.getAttribute('data-nav')));
 }
 function viewLogin(){
   return `<div class="auth-shell"><div class="auth-card">
