@@ -579,11 +579,32 @@ const api = {
   getMyFullProfile(){ return this.rpc('get_my_full_profile'); },
   getMySensitive(){ return this.rpc('get_my_sensitive_data'); },
   getMyPreferences(){ return this.rpc('get_my_preferences'); },
-  getCandidateProfiles(filters){ return this.rpc('get_candidate_profiles', filters); },
-  getCandidateById(id){ return this.rpc('get_candidate_profile_by_id', {p_candidate_id:id}); },
+  // Read the real Supabase Auth session. UI state (S.session/localStorage) is never used
+  // as proof of authentication for private candidate RPCs.
+  async getAuthSession(){
+    const {data, error} = await sb.auth.getSession();
+    if(error) throw error;
+    return data?.session || null;
+  },
+  async getCandidateProfiles(filters){
+    const session = await this.getAuthSession();
+    if(!session) return this.getPublicCandidateProfiles(filters);
+    return this.rpc('get_candidate_profiles', filters);
+  },
+  async getCandidateById(id){
+    const candidateId = String(id ?? '').trim();
+    if(!candidateId) throw {code:'invalid_candidate_id', message:'Missing candidate ID'};
+    const session = await this.getAuthSession();
+    if(!session) return this.getPublicCandidateById(candidateId);
+    return this.rpc('get_candidate_profile_by_id', {p_candidate_id:candidateId});
+  },
   // Public, anon-safe discovery — no session required. Never returns phone/email/sensitive data.
   getPublicCandidateProfiles(filters){ return this.rpc('get_public_candidate_profiles', filters); },
-  getPublicCandidateById(id){ return this.rpc('get_public_candidate_profile_by_id', {p_candidate_id:id}); },
+  getPublicCandidateById(id){
+    const candidateId = String(id ?? '').trim();
+    if(!candidateId) return Promise.reject({code:'invalid_candidate_id', message:'Missing candidate ID'});
+    return this.rpc('get_public_candidate_profile_by_id', {p_candidate_id:candidateId});
+  },
   getMutualMatches(limit,offset){ return this.rpc('get_mutual_matches', {p_limit:limit||20, p_offset:offset||0}); },
   isAdmin(){ return this.rpc('is_admin'); },
   hasPerm(code){ return this.rpc('has_admin_permission', {p_permission_code:code}); },
@@ -1868,12 +1889,13 @@ async function runDiscovery(){
     p_governorate_id: numOrNull('df-gov'),
     p_marital_statuses: chipsOn('df-marital').length? chipsOn('df-marital') : null
   };
-  // Anonymous visitors: safe public RPC (no phone/email/sensitive fields, no auth required).
-  // Logged-in members: richer private search RPC (more filters, requires a completed profile).
+  // The RPC choice is based only on the current Supabase Auth session.
+  // Anonymous visitors always use the public RPC; authenticated members may use the private RPC.
   let usedPublicFallback = false;
   try{
     let res;
-    if(S.session){
+    const authSession = await api.getAuthSession();
+    if(authSession){
       try{ res = await api.getCandidateProfiles(filters); }
       catch(privateErr){
         const pm = (privateErr&&privateErr.message)||'';
@@ -1929,7 +1951,9 @@ function requireAuthGate(actionLabel='هذه الخاصية'){
 async function mountCandidate(app, id){
   app.innerHTML=loadingBox('جارِ تحميل الملف…');
   try{
-    const c = S.session ? await api.getCandidateById(id) : await api.getPublicCandidateById(id);
+    // api.getCandidateById() re-checks the real Supabase Auth session and automatically
+    // switches to the public RPC when no valid session exists.
+    const c = await api.getCandidateById(id);
     if(!c){app.innerHTML=emptyBox('🚫','هذا الملف غير متاح','قد يكون غير مكتمل أو غير متاح وفق صلاحيات النظام.');return;}
     const gov=c.governorate?c.governorate.name_ar:'غير محدد';
     const traits=(c.personality_traits||[]).map(t=>`<span class="chip">${L('personality_trait',t)}</span>`).join('')||'<span class="muted">لا يوجد</span>';
