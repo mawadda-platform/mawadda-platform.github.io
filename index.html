@@ -500,7 +500,11 @@ const api = {
   getMutualMatches(limit,offset){ return this.rpc('get_mutual_matches', {p_limit:limit||20, p_offset:offset||0}); },
   isAdmin(){ return this.rpc('is_admin'); },
   hasPerm(code){ return this.rpc('has_admin_permission', {p_permission_code:code}); },
-  adminReview(requestId, decision, reason){ return this.rpc('admin_review_marriage_request', {p_request_id:requestId, p_decision:decision, p_reason:reason||null}); }
+  adminReview(requestId, decision, reason){ return this.rpc('admin_review_marriage_request', {p_request_id:requestId, p_decision:decision, p_reason:reason||null}); },
+  adminListAdmins(){ return this.rpc('admin_list_admins'); },
+  adminSearchUsersBasic(search){ return this.rpc('admin_search_users_basic', {p_search:search||null}); },
+  adminGrantRole(userId, roleCode){ return this.rpc('admin_grant_role', {p_user_id:userId, p_role_code:roleCode}); },
+  adminRevokeRole(userId, roleCode){ return this.rpc('admin_revoke_role', {p_user_id:userId, p_role_code:roleCode}); }
 };
 
 /* =========================================================
@@ -619,8 +623,8 @@ async function loadAccountContext(){
   try{
     S.isAdmin = await api.isAdmin();
     if(S.isAdmin){
-      const [rv, rr] = await Promise.all([api.hasPerm('requests.view'), api.hasPerm('requests.review')]);
-      S.adminPerms = {'requests.view':rv, 'requests.review':rr};
+      const [rv, rr, am] = await Promise.all([api.hasPerm('requests.view'), api.hasPerm('requests.review'), api.hasPerm('admins.manage')]);
+      S.adminPerms = {'requests.view':rv, 'requests.review':rr, 'admins.manage':am};
     }
   }catch(e){ S.isAdmin=false; }
 }
@@ -1885,11 +1889,87 @@ async function mountAdmin(app){
       <div class="admin-group"><h4>Administration</h4><p class="mb0">المسؤولون وسجل التدقيق — غير مربوطة حاليًا.</p></div>
     </div>
     <div class="section-title"><h3>طلبات الزواج بانتظار المراجعة</h3></div><div id="admin-req-list">${loadingBox()}</div>
+    ${S.adminPerms['admins.manage'] ? `
+    <div class="section-title"><h3>إدارة المشرفين</h3></div>
+    <div class="card">
+      <div class="flex-between"><h4 class="mb0">بحث عن مستخدم بالمعرف العام (member code)</h4></div>
+      <div class="flex gap8" style="margin-top:10px;">
+        <input type="text" id="am-search" placeholder="مثال: MW-002Z-BR9S" style="flex:1;">
+        <button class="btn btn-outline btn-sm" id="am-search-btn">بحث</button>
+      </div>
+      <div id="am-search-results" style="margin-top:12px;"></div>
+    </div>
+    <div class="section-title"><h3>المشرفون الحاليون</h3></div>
+    <div id="am-admins-list">${loadingBox()}</div>
+    ` : ''}
     <div class="section-title"><h3>ميزات غير متاحة بعد</h3></div><div class="grid grid-3">
-      ${['إدارة المستخدمين','التحقق من الحسابات','البلاغات','مراقبة الرسائل','سجل النشاط','إدارة المسؤولين'].map(t=>`<div class="card coming-soon"><div class="flex-between"><h4>${t}</h4><span class="badge badge-muted">Coming Soon</span></div><p class="mb0">لا يوجد Backend فعلي لهذه الوحدة في الملف الحالي.</p></div>`).join('')}
+      ${['إدارة المستخدمين','التحقق من الحسابات','البلاغات','مراقبة الرسائل','سجل النشاط'].map(t=>`<div class="card coming-soon"><div class="flex-between"><h4>${t}</h4><span class="badge badge-muted">Coming Soon</span></div><p class="mb0">لا يوجد Backend فعلي لهذه الوحدة في الملف الحالي.</p></div>`).join('')}
     </div>
   </div>`;
   await renderAdminRequests();
+  if(S.adminPerms['admins.manage']){ mountAdminManagement(); await renderAdminsList(); }
+}
+
+const ADMIN_ROLE_CODES = ['SUPER_ADMIN','ADMIN','MODERATOR','VERIFICATION_ADMIN','SUPPORT_ADMIN'];
+
+function mountAdminManagement(){
+  const btn = document.getElementById('am-search-btn');
+  const input = document.getElementById('am-search');
+  const runSearch = async ()=>{
+    const box = document.getElementById('am-search-results');
+    box.innerHTML = loadingBox('جارِ البحث…');
+    try{
+      const users = await api.adminSearchUsersBasic(input.value.trim());
+      if(!users.length){ box.innerHTML = emptyBox('🔍','لا نتائج','لم يتم العثور على مستخدم بهذا المعرف.'); return; }
+      box.innerHTML = users.map(u=>`
+        <div class="card card-tight flex-between" style="margin-bottom:8px;">
+          <div>
+            <p class="mb0"><strong>${u.member_code}</strong></p>
+            <p class="mb0 muted">الحالة: ${u.status} — أُنشئ: ${new Date(u.created_at).toLocaleDateString('ar-EG')}</p>
+          </div>
+          <div class="flex gap8">
+            <select class="am-role-select" data-uid="${u.user_id}" style="width:auto;">
+              ${ADMIN_ROLE_CODES.map(rc=>`<option value="${rc}">${rc}</option>`).join('')}
+            </select>
+            <button class="btn btn-primary btn-sm am-grant-btn" data-uid="${u.user_id}" data-code="${u.member_code}">تعيين Admin</button>
+          </div>
+        </div>`).join('');
+      box.querySelectorAll('.am-grant-btn').forEach(b=>b.onclick=()=>{
+        const uid = b.dataset.uid;
+        const roleSelect = box.querySelector(`.am-role-select[data-uid="${uid}"]`);
+        const roleCode = roleSelect.value;
+        confirmModal('تعيين دور إداري', `هل تريد منح المستخدم <strong>${b.dataset.code}</strong> الدور <strong>${roleCode}</strong>؟`, 'تعيين', async ()=>{
+          try{ await api.adminGrantRole(uid, roleCode); toast('تم التعيين بنجاح','success'); await renderAdminsList(); await runSearch(); }
+          catch(e){ toast(friendlyError(e),'error'); }
+        });
+      });
+    }catch(e){ box.innerHTML = errorBox(e); }
+  };
+  btn.onclick = runSearch;
+  input.onkeydown = (e)=>{ if(e.key==='Enter') runSearch(); };
+}
+
+async function renderAdminsList(){
+  const list = document.getElementById('am-admins-list');
+  if(!list) return;
+  try{
+    const admins = await api.adminListAdmins();
+    if(!admins.length){ list.innerHTML = emptyBox('🛡️','لا يوجد مشرفون بعد','استخدم البحث أعلاه لتعيين أول مشرف.'); return; }
+    list.innerHTML = admins.map(a=>`
+      <div class="card card-tight flex-between" style="margin-bottom:8px;">
+        <div>
+          <p class="mb0"><strong>${a.member_code}</strong> <span class="badge badge-info">${a.role_code}</span></p>
+          <p class="mb0 muted">مُنح بتاريخ: ${new Date(a.granted_at).toLocaleDateString('ar-EG')}</p>
+        </div>
+        <button class="btn btn-danger btn-sm am-revoke-btn" data-uid="${a.user_id}" data-code="${a.role_code}" data-member="${a.member_code}">إزالة</button>
+      </div>`).join('');
+    list.querySelectorAll('.am-revoke-btn').forEach(b=>b.onclick=()=>{
+      confirmModal('إزالة دور إداري', `هل تريد إزالة الدور <strong>${b.dataset.code}</strong> من <strong>${b.dataset.member}</strong>؟`, 'إزالة', async ()=>{
+        try{ await api.adminRevokeRole(b.dataset.uid, b.dataset.code); toast('تمت الإزالة','success'); await renderAdminsList(); }
+        catch(e){ toast(friendlyError(e),'error'); }
+      }, true);
+    });
+  }catch(e){ list.innerHTML = errorBox(e); }
 }
 
 async function renderAdminRequests(){
