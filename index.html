@@ -344,6 +344,8 @@ textarea{min-height:110px;}
 .admin-group{padding:14px;border:1px solid var(--c-border);border-radius:15px;background:var(--c-surface);}
 .admin-group h4{font-size:13px;color:var(--c-primary);}
 .coming-soon{border-style:dashed!important;}
+.notification-item{padding:13px 14px;border:1px solid var(--c-border);border-radius:14px;background:var(--c-surface);margin-bottom:8px;}
+.notification-item.unread{border-color:var(--c-accent);background:var(--c-surface-2);}
 
 /* Trust / privacy strip (homepage) */
 .trust-strip{display:grid;gap:10px;margin-top:26px;}
@@ -589,6 +591,7 @@ const api = {
   async getCandidateProfiles(filters){
     const session = await this.getAuthSession();
     if(!session) return this.getPublicCandidateProfiles(filters);
+    // Authenticated users always use the DB-protected private RPC. Never fall back to public discovery.
     return this.rpc('get_candidate_profiles', filters);
   },
   async getCandidateById(id){
@@ -596,6 +599,7 @@ const api = {
     if(!candidateId) throw {code:'invalid_candidate_id', message:'Missing candidate ID'};
     const session = await this.getAuthSession();
     if(!session) return this.getPublicCandidateById(candidateId);
+    // Authenticated users always use the DB-protected private RPC. Never fall back to public profile RPC.
     return this.rpc('get_candidate_profile_by_id', {p_candidate_id:candidateId});
   },
   // Public, anon-safe discovery — no session required. Never returns phone/email/sensitive data.
@@ -612,7 +616,20 @@ const api = {
   adminListAdmins(){ return this.rpc('admin_list_admins'); },
   adminSearchUsersBasic(search){ return this.rpc('admin_search_users_basic', {p_search:search||null}); },
   adminGrantRole(userId, roleCode){ return this.rpc('admin_grant_role', {p_user_id:userId, p_role_code:roleCode}); },
-  adminRevokeRole(userId, roleCode){ return this.rpc('admin_revoke_role', {p_user_id:userId, p_role_code:roleCode}); }
+  adminRevokeRole(userId, roleCode){ return this.rpc('admin_revoke_role', {p_user_id:userId, p_role_code:roleCode}); },
+  isSuperAdmin(){ return this.rpc('is_super_admin'); },
+  adminGetContactDisclosures(){ return this.rpc('admin_get_contact_disclosures'); },
+  adminGetComplaints(){ return this.rpc('admin_get_complaints'); },
+  adminGetWarnings(){ return this.rpc('admin_get_warnings'); },
+  recordAcceptance(requestId, decision){ return this.rpc('record_marriage_request_acceptance', {p_request_id:requestId, p_decision:decision}); },
+  getAcceptanceState(requestId){ return this.rpc('get_my_acceptance_state', {p_request_id:requestId}); },
+  getNotifications(limit=30){ return this.rpc('get_my_notifications', {p_limit:limit}); },
+  markNotificationRead(id){ return this.rpc('mark_notification_read', {p_notification_id:id}); },
+  getApprovedContacts(){ return this.rpc('get_my_approved_contacts'); },
+  adminReviewDisclosure(id, decision, reason){ return this.rpc('admin_review_contact_disclosure', {p_disclosure_id:id,p_decision:decision,p_reason:reason||null}); },
+  adminUpdateComplaint(id,status,action,notes){ return this.rpc('admin_update_complaint', {p_complaint_id:id,p_status:status,p_admin_action:action||null,p_admin_notes:notes||null}); },
+  adminIssueWarning(userId,reason,evidence,notes){ return this.rpc('admin_issue_warning', {p_target_user_id:userId,p_reason:reason,p_evidence:evidence||null,p_notes:notes||null}); },
+  adminSetWarningStatus(id,status,notes){ return this.rpc('admin_set_warning_status', {p_warning_id:id,p_status:status,p_notes:notes||null}); }
 };
 
 /* =========================================================
@@ -1440,8 +1457,21 @@ async function mountDashboard(app){
     </div>
     <div class="section-title"><h3>التوافقات</h3><button class="btn btn-outline btn-sm" data-nav="/matches">عرض الكل</button></div>
     <div class="card"><p class="mb0">يمكنك الوصول إلى نتائج التوافق المبنية على التفضيلات من صفحة التوافقات.</p></div>
+    <div class="section-title"><h3>الإشعارات</h3></div><div id="dashboard-notifications">${loadingBox('جارِ تحميل الإشعارات…')}</div>
+    <div class="section-title"><h3>بيانات الاتصال المعتمدة</h3></div><div id="dashboard-contacts">${loadingBox('جارِ التحقق من بيانات الاتصال…')}</div>
   </div>`;
   document.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.dataset.nav));
+  mountDashboardNotifications();
+  mountDashboardContacts();
+}
+
+async function mountDashboardNotifications(){
+  const box=document.getElementById('dashboard-notifications'); if(!box) return;
+  try{ const rows=await api.getNotifications(8); box.innerHTML=rows.length?rows.map(n=>`<div class="notification-item ${n.read_at?'':'unread'}"><div class="flex-between"><strong>${n.title}</strong><span class="muted" style="font-size:11px;">${new Date(n.created_at).toLocaleString('ar-EG')}</span></div><p class="mb0">${n.message||''}</p>${n.read_at?'':`<button class="btn btn-outline btn-sm" style="margin-top:8px;" data-notif-read="${n.id}">تمت القراءة</button>`}</div>`).join(''):emptyBox('🔔','لا توجد إشعارات جديدة','ستظهر هنا تحديثات الطلبات والتنبيهات.'); box.querySelectorAll('[data-notif-read]').forEach(b=>b.onclick=async()=>{try{await api.markNotificationRead(b.dataset.notifRead);mountDashboardNotifications();}catch(e){toast(friendlyError(e),'error');}}); }catch(e){box.innerHTML=errorBox(e);}
+}
+async function mountDashboardContacts(){
+  const box=document.getElementById('dashboard-contacts'); if(!box) return;
+  try{ const rows=await api.getApprovedContacts(); box.innerHTML=rows.length?rows.map(c=>`<div class="card card-tight" style="margin-bottom:8px;"><strong>${c.contact_type==='guardian_phone'?'هاتف ولي الأمر':'الهاتف الشخصي'}</strong><p class="mb0">${c.guardian_name?c.guardian_name+' · ':''}${c.relationship?c.relationship+' · ':''}<strong dir="ltr">${c.phone||'—'}</strong></p></div>`).join(''):emptyBox('🔒','لا توجد بيانات اتصال معتمدة','تظهر بيانات الاتصال فقط بعد القبول المتبادل وموافقة الإدارة.'); }catch(e){box.innerHTML=errorBox(e);}
 }
 
 /* =========================================================
@@ -1889,35 +1919,20 @@ async function runDiscovery(){
     p_governorate_id: numOrNull('df-gov'),
     p_marital_statuses: chipsOn('df-marital').length? chipsOn('df-marital') : null
   };
-  // The RPC choice is based only on the current Supabase Auth session.
-  // Anonymous visitors always use the public RPC; authenticated members may use the private RPC.
-  let usedPublicFallback = false;
   try{
-    let res;
     const authSession = await api.getAuthSession();
-    if(authSession){
-      try{ res = await api.getCandidateProfiles(filters); }
-      catch(privateErr){
-        const pm = (privateErr&&privateErr.message)||'';
-        // Profile not complete yet / account not eligible: don't block browsing — fall back to public view.
-        if(/Complete your profile|not eligible/i.test(pm)){ res = await api.getPublicCandidateProfiles(filters); usedPublicFallback = true; }
-        else throw privateErr;
-      }
-    } else {
-      res = await api.getPublicCandidateProfiles(filters);
-    }
-    const fallbackBanner = usedPublicFallback ? `<div class="state-box" style="margin-bottom:10px;padding:10px 14px;"><p class="muted" style="margin:0;">أكمل ملفك الشخصي لرؤية نتائج بحث أدق ومطابقة لتفضيلاتك. حاليًا تشاهد الملفات العامة فقط. <a style="color:var(--c-primary);font-weight:800;cursor:pointer;" data-nav="/profile">إكمال الملف</a></p></div>` : '';
+    // Public discovery is only for anonymous visitors. Authenticated users are never downgraded to public data.
+    const res = authSession ? await api.getCandidateProfiles(filters) : await api.getPublicCandidateProfiles(filters);
     if(!res.items || !res.items.length){
-      box.innerHTML = fallbackBanner + emptyBox('🔍','لا توجد نتائج مطابقة','جرّب تعديل الفلاتر أو إكمال ملفك الشخصي وتفضيلاتك أولًا.');
+      box.innerHTML = emptyBox('🔍','لا توجد نتائج مطابقة',authSession?'أكمل ملفك الشخصي وتفضيلاتك أولًا أو جرّب تعديل الفلاتر.':'لا توجد ملفات عامة متاحة حاليًا.');
       return;
     }
-    box.innerHTML = fallbackBanner + `<div class="grid grid-3">${res.items.map(candCard).join('')}</div>
+    box.innerHTML = `<div class="grid grid-3">${res.items.map(candCard).join('')}</div>
       <div class="flex" style="justify-content:center; gap:10px; margin-top:20px;">
         <button class="btn btn-outline btn-sm" id="disc-prev" ${discoveryOffset===0?'disabled':''}>السابق</button>
         <span class="muted">${discoveryOffset+1}–${discoveryOffset+res.returned_count} من ${res.total_count}</span>
         <button class="btn btn-outline btn-sm" id="disc-next" ${!res.has_more?'disabled':''}>التالي</button>
       </div>`;
-    box.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.dataset.nav));
     box.querySelectorAll('[data-cand]').forEach(el=>el.onclick=()=>navigate('/candidate/'+el.dataset.cand));
     const prev = document.getElementById('disc-prev'); if(prev) prev.onclick=()=>{ discoveryOffset=Math.max(0,discoveryOffset-DISCOVERY_LIMIT); runDiscovery(); };
     const next = document.getElementById('disc-next'); if(next) next.onclick=()=>{ discoveryOffset+=DISCOVERY_LIMIT; runDiscovery(); };
@@ -1964,7 +1979,7 @@ async function mountCandidate(app, id){
       <div class="profile-section"><h3>التعليم والعمل</h3><p><strong>استقرار العمل:</strong> ${L('work_stability',c.work_stability)}</p></div>
       <div class="profile-section"><h3>السكن ونمط الحياة</h3><p><strong>الحالة السكنية:</strong> ${L('housing_status',c.housing_status)}</p><p><strong>الاستعداد للانتقال:</strong> ${L('relocation_willingness',c.relocation_willingness)}</p></div>
       <div class="profile-section"><h3>الصفات</h3><div>${traits}</div></div>
-      <div class="gate-box" style="margin-top:14px;"><strong>التواصل يتم عبر طلب الزواج</strong><p>لا تُعرض بيانات الاتصال المباشر من خلال هذا الملف.</p><button class="btn btn-primary" id="send-request">طلب الزواج</button></div>
+      <div class="gate-box" style="margin-top:14px;"><strong>التواصل يتم عبر طلب الزواج</strong><p>لا تُعرض بيانات الاتصال المباشر من خلال هذا الملف.</p><div class="flex gap8" style="justify-content:center;flex-wrap:wrap;"><button class="btn btn-primary" id="send-request">طلب الزواج</button><button class="btn btn-outline" id="report-user">إبلاغ عن هذا الملف</button></div></div>
       </div></div>`;
     document.querySelector('[data-back]').onclick=()=>navigate('/discovery');
     document.getElementById('send-request').onclick=()=>{
@@ -1972,6 +1987,17 @@ async function mountCandidate(app, id){
       confirmModal('إرسال طلب زواج','سيتم إرسال طلبك لمراجعة الإدارة أولًا قبل وصوله للطرف الآخر. هل تريد المتابعة؟','إرسال',async()=>{
         try{const {error}=await sb.from('marriage_requests').insert({sender_id:S.session.user.id,recipient_id:id});if(error)throw error;toast('تم إرسال الطلب، بانتظار مراجعة الإدارة','success');navigate('/requests');}
         catch(e){toast(friendlyError(e),'error');}
+      });
+    };
+    document.getElementById('report-user').onclick=()=>{
+      if(!requireAuthGate('إرسال بلاغ')) return;
+      openModal(`<h3>إبلاغ عن الملف</h3><label>السبب</label><input type="text" id="cp-reason" maxlength="200"><label>التفاصيل</label><textarea id="cp-details" maxlength="5000"></textarea><div class="flex gap8" style="justify-content:flex-end;margin-top:14px;"><button class="btn btn-ghost" id="cp-cancel">إلغاء</button><button class="btn btn-danger" id="cp-send">إرسال البلاغ</button></div>`,root=>{
+        root.querySelector('#cp-cancel').onclick=closeModal;
+        root.querySelector('#cp-send').onclick=async()=>{
+          const reason=val('cp-reason'), details=val('cp-details')||null;
+          if(!reason){toast('اكتب سبب البلاغ أولًا','error');return;}
+          try{const {error}=await sb.from('complaints').insert({complainant_user_id:S.session.user.id,target_user_id:id,reason,details});if(error)throw error;closeModal();toast('تم إرسال البلاغ للإدارة','success');}catch(e){toast(friendlyError(e),'error');}
+        };
       });
     };
   }catch(e){
@@ -2030,20 +2056,24 @@ async function renderSentRequests(panel){
   if(!data.length){ panel.innerHTML = emptyBox('✉️','لم ترسل أي طلبات بعد','توجّه لصفحة الاستكشاف لإرسال طلب تعارف.'); return; }
   const {data: reviews} = await sb.from('marriage_request_reviews').select('*').in('request_id', data.map(r=>r.id));
   const reviewMap = Object.fromEntries((reviews||[]).map(r=>[r.request_id, r]));
-  panel.innerHTML = data.map(r=>{
-    const rev = reviewMap[r.id];
+  const states = await Promise.all(data.map(r=>api.getAcceptanceState(r.id).catch(()=>null)));
+  panel.innerHTML = data.map((r,i)=>{
+    const rev = reviewMap[r.id]; const st=states[i]; const mine=st&&st.mine?st.mine.decision:null;
+    const approved=rev&&rev.decision==='approved';
     return `<div class="card card-tight" style="margin-bottom:10px;">
-      <div class="flex-between">
-        <span class="badge ${statusBadgeClass(r.status)}">${L('request_status',r.status)}</span>
-        <span class="muted" style="font-size:12px;">${new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
-      </div>
+      <div class="flex-between"><span class="badge ${statusBadgeClass(r.status)}">${L('request_status',r.status)}</span><span class="muted" style="font-size:12px;">${new Date(r.created_at).toLocaleDateString('ar-EG')}</span></div>
       <p class="mb0" style="margin-top:6px;">حالة المراجعة الإدارية: <strong>${rev? L('review_decision',rev.decision):'—'}</strong>${rev&&rev.reason?` — السبب: ${rev.reason}`:''}</p>
+      ${approved?`<p class="mb0" style="margin-top:6px;">موافقتك: <strong>${mine==='accepted'?'موافق':mine==='rejected'?'رافض':'لم تُسجّل بعد'}</strong>${st&&st.mutual_acceptance?' · <span class="badge badge-success">قبول متبادل</span>':''}</p>`:''}
       <div class="flex gap8" style="margin-top:10px;">
         <button class="btn btn-outline btn-sm" data-view="${r.recipient_id}">عرض الملف</button>
+        ${approved&&!st?.mutual_acceptance&&mine!=='accepted'?`<button class="btn btn-success btn-sm" data-accept-sent="${r.id}">قبول</button>`:''}
+        ${approved&&!st?.mutual_acceptance&&mine!=='rejected'?`<button class="btn btn-danger btn-sm" data-decline-sent="${r.id}">رفض</button>`:''}
         ${r.status==='pending'?`<button class="btn btn-danger btn-sm" data-withdraw="${r.id}">سحب الطلب</button>`:''}
       </div>
     </div>`;
   }).join('');
+  panel.querySelectorAll('[data-accept-sent]').forEach(b=>b.onclick=async()=>{try{await api.recordAcceptance(b.dataset.acceptSent,'accepted');toast('تم تسجيل موافقتك','success');mountRequests(document.getElementById('app'));}catch(e){toast(friendlyError(e),'error');}});
+  panel.querySelectorAll('[data-decline-sent]').forEach(b=>b.onclick=async()=>{confirmModal('رفض الطلب','هل تريد رفض طلب الزواج؟','رفض',async()=>{try{await api.recordAcceptance(b.dataset.declineSent,'rejected');toast('تم تسجيل الرفض','success');mountRequests(document.getElementById('app'));}catch(e){toast(friendlyError(e),'error');}},true);});
   panel.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>navigate('/candidate/'+b.dataset.view));
   panel.querySelectorAll('[data-withdraw]').forEach(b=>b.onclick=()=>{
     confirmModal('سحب الطلب','هل أنت متأكد من سحب طلب الزواج هذا؟','سحب', async ()=>{
@@ -2060,29 +2090,21 @@ async function renderReceivedRequests(panel){
   const {data, error} = await sb.from('marriage_requests').select('*').eq('recipient_id', S.session.user.id).order('created_at',{ascending:false});
   if(error) throw error;
   if(!data.length){ panel.innerHTML = emptyBox('📭','لا توجد طلبات واردة معتمدة حاليًا','تظهر الطلبات هنا فقط بعد موافقة إدارة المنصة عليها.'); return; }
-  panel.innerHTML = data.map(r=>`<div class="card card-tight" style="margin-bottom:10px;">
-      <div class="flex-between">
-        <span class="badge ${statusBadgeClass(r.status)}">${L('request_status',r.status)}</span>
-        <span class="muted" style="font-size:12px;">${new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
-      </div>
-      <div class="flex gap8" style="margin-top:10px;">
-        <button class="btn btn-outline btn-sm" data-view="${r.sender_id}">عرض الملف</button>
-        ${r.status==='pending'?`<button class="btn btn-success btn-sm" data-accept="${r.id}">قبول</button><button class="btn btn-danger btn-sm" data-decline="${r.id}">رفض</button>`:''}
-      </div>
-    </div>`).join('');
+  const states = await Promise.all(data.map(r=>api.getAcceptanceState(r.id).catch(()=>null)));
+  panel.innerHTML = data.map((r,i)=>{const st=states[i]; const mine=st&&st.mine?st.mine.decision:null; return `<div class="card card-tight" style="margin-bottom:10px;">
+      <div class="flex-between"><span class="badge ${statusBadgeClass(r.status)}">${L('request_status',r.status)}</span><span class="muted" style="font-size:12px;">${new Date(r.created_at).toLocaleDateString('ar-EG')}</span></div>
+      ${st&&st.mutual_acceptance?`<p class="mb0" style="margin-top:6px;"><span class="badge badge-success">قبول متبادل</span></p>`:mine?`<p class="mb0" style="margin-top:6px;">موافقتك: <strong>${mine==='accepted'?'موافق':'رافض'}</strong></p>`:''}
+      <div class="flex gap8" style="margin-top:10px;"><button class="btn btn-outline btn-sm" data-view="${r.sender_id}">عرض الملف</button>${r.status==='pending'?`<button class="btn btn-success btn-sm" data-accept="${r.id}">قبول</button><button class="btn btn-danger btn-sm" data-decline="${r.id}">رفض</button>`:''}</div>
+    </div>`;}).join('');
   panel.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>navigate('/candidate/'+b.dataset.view));
   panel.querySelectorAll('[data-accept]').forEach(b=>b.onclick=()=>{
-    confirmModal('قبول الطلب','هل تريد قبول طلب الزواج هذا؟','قبول', async ()=>{
-      try{ const {error} = await sb.from('marriage_requests').update({status:'accepted'}).eq('id', b.dataset.accept); if(error) throw error;
-        toast('تم قبول الطلب','success'); mountRequests(document.getElementById('app'));
-      }catch(e){ toast(friendlyError(e),'error'); }
+    confirmModal('قبول الطلب','هل تريد تسجيل موافقتك على طلب الزواج؟ لن يكتمل القبول المتبادل إلا بعد موافقة الطرفين.','قبول', async ()=>{
+      try{ await api.recordAcceptance(b.dataset.accept,'accepted'); toast('تم تسجيل موافقتك','success'); mountRequests(document.getElementById('app')); }catch(e){ toast(friendlyError(e),'error'); }
     });
   });
   panel.querySelectorAll('[data-decline]').forEach(b=>b.onclick=()=>{
-    confirmModal('رفض الطلب','هل تريد رفض طلب الزواج هذا؟','رفض', async ()=>{
-      try{ const {error} = await sb.from('marriage_requests').update({status:'declined'}).eq('id', b.dataset.decline); if(error) throw error;
-        toast('تم رفض الطلب','success'); mountRequests(document.getElementById('app'));
-      }catch(e){ toast(friendlyError(e),'error'); }
+    confirmModal('رفض الطلب','هل تريد رفض طلب الزواج؟','رفض', async ()=>{
+      try{ await api.recordAcceptance(b.dataset.decline,'rejected'); toast('تم تسجيل الرفض','success'); mountRequests(document.getElementById('app')); }catch(e){ toast(friendlyError(e),'error'); }
     }, true);
   });
 }
@@ -2145,34 +2167,32 @@ function openGuardianModal(existing){
 ========================================================= */
 async function mountAdmin(app){
   if(!S.isAdmin){app.innerHTML=`<div class="container">${emptyBox('🚫','غير مصرح','هذه الصفحة مخصصة لمسؤولي المنصة فقط.')}</div>`;return;}
+  let superAdmin=false; try{ superAdmin=await api.isSuperAdmin(); }catch(e){}
   app.innerHTML=`<div class="container">
-    <div class="page-heading"><div><div class="eyebrow">Administration</div><h2>لوحة الإدارة</h2><p class="mb0">أقسام واضحة للوظائف المتاحة حاليًا وما لم يُربط بعد.</p></div></div>
-    <div class="admin-nav">
-      <div class="admin-group"><h4>Management</h4><p class="mb0">طلبات الزواج وإدارة المستخدمين.</p></div>
-      <div class="admin-group"><h4>Matching</h4><p class="mb0">وظائف التوافق المرتبطة بالنظام الحالي.</p></div>
-      <div class="admin-group"><h4>Safety</h4><p class="mb0">التحقق والبلاغات والرسائل — غير مربوطة حاليًا.</p></div>
-      <div class="admin-group"><h4>Administration</h4><p class="mb0">المسؤولون وسجل التدقيق — غير مربوطة حاليًا.</p></div>
-    </div>
+    <div class="page-heading"><div><div class="eyebrow">Administration</div><h2>لوحة الإدارة</h2><p class="mb0">إدارة الطلبات والسلامة والبلاغات والتنبيهات والصلاحيات.</p></div></div>
+    <div class="admin-nav"><div class="admin-group"><h4>Management</h4><p class="mb0">طلبات الزواج والمستخدمون.</p></div><div class="admin-group"><h4>Safety</h4><p class="mb0">البلاغات والتنبيهات والإيقاف.</p></div><div class="admin-group"><h4>Contact</h4><p class="mb0">مراجعة كشف بيانات الاتصال بعد القبول المتبادل.</p></div><div class="admin-group"><h4>Audit</h4><p class="mb0">التغييرات الحساسة تسجل في سجل التدقيق الموجود.</p></div></div>
     <div class="section-title"><h3>طلبات الزواج بانتظار المراجعة</h3></div><div id="admin-req-list">${loadingBox()}</div>
-    ${S.adminPerms['admins.manage'] ? `
-    <div class="section-title"><h3>إدارة المشرفين</h3></div>
-    <div class="card">
-      <div class="flex-between"><h4 class="mb0">بحث عن مستخدم بالمعرف العام (member code)</h4></div>
-      <div class="flex gap8" style="margin-top:10px;">
-        <input type="text" id="am-search" placeholder="مثال: MW-002Z-BR9S" style="flex:1;">
-        <button class="btn btn-outline btn-sm" id="am-search-btn">بحث</button>
-      </div>
-      <div id="am-search-results" style="margin-top:12px;"></div>
-    </div>
-    <div class="section-title"><h3>المشرفون الحاليون</h3></div>
-    <div id="am-admins-list">${loadingBox()}</div>
-    ` : ''}
-    <div class="section-title"><h3>ميزات غير متاحة بعد</h3></div><div class="grid grid-3">
-      ${['إدارة المستخدمين','التحقق من الحسابات','البلاغات','مراقبة الرسائل','سجل النشاط'].map(t=>`<div class="card coming-soon"><div class="flex-between"><h4>${t}</h4><span class="badge badge-muted">Coming Soon</span></div><p class="mb0">لا يوجد Backend فعلي لهذه الوحدة في الملف الحالي.</p></div>`).join('')}
-    </div>
+    ${superAdmin ? `<div class="section-title"><h3>إدارة المشرفين</h3></div><div class="card"><div class="flex-between"><h4 class="mb0">بحث بالاسم أو البريد أو Member Code</h4></div><div class="flex gap8" style="margin-top:10px;"><input type="text" id="am-search" placeholder="الاسم / البريد / MW-...." style="flex:1;"><button class="btn btn-outline btn-sm" id="am-search-btn">بحث</button></div><div id="am-search-results" style="margin-top:12px;"></div></div><div class="section-title"><h3>المشرفون الحاليون</h3></div><div id="am-admins-list">${loadingBox()}</div>`:''}
+    <div class="section-title"><h3>بلاغات المستخدمين</h3></div><div id="admin-complaints">${loadingBox()}</div>
+    <div class="section-title"><h3>التنبيهات الإدارية</h3></div><div id="admin-warnings">${loadingBox()}</div>
+    <div class="section-title"><h3>طلبات كشف بيانات الاتصال</h3></div><div id="admin-disclosures">${loadingBox()}</div>
   </div>`;
   await renderAdminRequests();
-  if(S.adminPerms['admins.manage']){ mountAdminManagement(); await renderAdminsList(); }
+  if(superAdmin){ mountAdminManagement(); await renderAdminsList(); }
+  await renderAdminComplaints(); await renderAdminWarnings(); await renderAdminDisclosures();
+}
+
+async function renderAdminComplaints(){
+  const box=document.getElementById('admin-complaints'); if(!box) return;
+  try{const rows=await api.adminGetComplaints(); if(!rows.length){box.innerHTML=emptyBox('🛡️','لا توجد شكاوى','لا توجد شكاوى مسجلة حاليًا.');return;} box.innerHTML=rows.map(c=>`<div class="card card-tight" style="margin-bottom:8px;"><div class="flex-between"><strong>${c.reason}</strong><span class="badge badge-muted">${c.status}</span></div><p class="mb0">المشتكي: ${c.complainant_member_code} · المستهدف: ${c.target_member_code}</p><p class="mb0">${c.details||''}</p><div class="flex gap8" style="margin-top:8px;"><button class="btn btn-outline btn-sm" data-cstatus="${c.id}" data-status="under_review">قيد المراجعة</button><button class="btn btn-success btn-sm" data-cstatus="${c.id}" data-status="resolved">حل</button><button class="btn btn-danger btn-sm" data-cstatus="${c.id}" data-status="dismissed">رفض</button></div></div>`).join(''); box.querySelectorAll('[data-cstatus]').forEach(b=>b.onclick=async()=>{try{await api.adminUpdateComplaint(b.dataset.cstatus,b.dataset.status,null,null);toast('تم تحديث الشكوى','success');renderAdminComplaints();}catch(e){toast(friendlyError(e),'error');}});}catch(e){box.innerHTML=errorBox(e);}
+}
+async function renderAdminWarnings(){
+  const box=document.getElementById('admin-warnings'); if(!box) return;
+  try{const rows=await api.adminGetWarnings(); if(!rows.length){box.innerHTML=emptyBox('⚠️','لا توجد تنبيهات','لا توجد تنبيهات مسجلة حاليًا.');return;} box.innerHTML=rows.map(w=>`<div class="card card-tight" style="margin-bottom:8px;"><div class="flex-between"><strong>${w.target_member_code}</strong><span class="badge ${w.status==='confirmed'?'badge-danger':'badge-warn'}">${w.status}</span></div><p class="mb0">${w.reason}</p><div class="flex gap8" style="margin-top:8px;">${w.status==='issued'?`<button class="btn btn-danger btn-sm" data-wconfirm="${w.id}">تأكيد التنبيه</button>`:''}${w.status==='confirmed'?`<button class="btn btn-outline btn-sm" data-wrevoke="${w.id}">إلغاء التنبيه</button>`:''}</div></div>`).join(''); box.querySelectorAll('[data-wconfirm]').forEach(b=>b.onclick=async()=>{try{await api.adminSetWarningStatus(b.dataset.wconfirm,'confirmed');toast('تم تأكيد التنبيه','success');renderAdminWarnings();}catch(e){toast(friendlyError(e),'error');}});box.querySelectorAll('[data-wrevoke]').forEach(b=>b.onclick=async()=>{try{await api.adminSetWarningStatus(b.dataset.wrevoke,'revoked');toast('تم إلغاء التنبيه','success');renderAdminWarnings();}catch(e){toast(friendlyError(e),'error');}});}catch(e){box.innerHTML=errorBox(e);}
+}
+async function renderAdminDisclosures(){
+  const box=document.getElementById('admin-disclosures'); if(!box) return;
+  try{const rows=await api.adminGetContactDisclosures(); if(!rows.length){box.innerHTML=emptyBox('🔒','لا توجد طلبات كشف','ستظهر هنا طلبات الاتصال الناتجة عن القبول المتبادل.');return;} box.innerHTML=rows.map(d=>`<div class="card card-tight" style="margin-bottom:8px;"><div class="flex-between"><strong>${d.beneficiary_member_code}</strong><span class="badge ${d.approval_status==='approved'?'badge-success':d.approval_status==='rejected'?'badge-danger':'badge-warn'}">${d.approval_status}</span></div><p class="mb0">${d.contact_type==='guardian_phone'?'هاتف ولي الأمر':'الهاتف الشخصي'} · Request: ${d.request_id}</p>${d.approval_status==='pending'?`<div class="flex gap8" style="margin-top:8px;"><button class="btn btn-success btn-sm" data-dapprove="${d.id}">اعتماد</button><button class="btn btn-danger btn-sm" data-dreject="${d.id}">رفض</button></div>`:''}</div>`).join(''); box.querySelectorAll('[data-dapprove]').forEach(b=>b.onclick=async()=>{try{await api.adminReviewDisclosure(b.dataset.dapprove,'approved');toast('تم اعتماد كشف الاتصال','success');renderAdminDisclosures();}catch(e){toast(friendlyError(e),'error');}});box.querySelectorAll('[data-dreject]').forEach(b=>b.onclick=()=>{openModal(`<h3>رفض كشف الاتصال</h3><textarea id="dr-reason" placeholder="سبب الرفض"></textarea><div class="flex gap8" style="justify-content:flex-end;margin-top:12px;"><button class="btn btn-ghost" id="dr-cancel">إلغاء</button><button class="btn btn-danger" id="dr-ok">رفض</button></div>`,root=>{root.querySelector('#dr-cancel').onclick=closeModal;root.querySelector('#dr-ok').onclick=async()=>{try{await api.adminReviewDisclosure(b.dataset.dreject,'rejected',val('dr-reason')||null);closeModal();toast('تم رفض كشف الاتصال','success');renderAdminDisclosures();}catch(e){toast(friendlyError(e),'error');}};});});}catch(e){box.innerHTML=errorBox(e);}
 }
 
 const ADMIN_ROLE_CODES = ['SUPER_ADMIN','ADMIN','MODERATOR','VERIFICATION_ADMIN','SUPPORT_ADMIN'];
@@ -2189,17 +2209,20 @@ function mountAdminManagement(){
       box.innerHTML = users.map(u=>`
         <div class="card card-tight flex-between" style="margin-bottom:8px;">
           <div>
-            <p class="mb0"><strong>${u.member_code}</strong></p>
-            <p class="mb0 muted">الحالة: ${u.status} — أُنشئ: ${new Date(u.created_at).toLocaleDateString('ar-EG')}</p>
+            <p class="mb0"><strong>${u.member_code}</strong>${u.full_name?` · ${u.full_name}`:''}</p>
+            <p class="mb0 muted">${u.email||'—'} · الحالة: ${u.status} — أُنشئ: ${new Date(u.created_at).toLocaleDateString('ar-EG')}</p>
           </div>
           <div class="flex gap8">
             <select class="am-role-select" data-uid="${u.user_id}" style="width:auto;">
               ${ADMIN_ROLE_CODES.map(rc=>`<option value="${rc}">${rc}</option>`).join('')}
             </select>
-            <button class="btn btn-primary btn-sm am-grant-btn" data-uid="${u.user_id}" data-code="${u.member_code}">تعيين Admin</button>
+            <button class="btn btn-primary btn-sm am-grant-btn" data-uid="${u.user_id}" data-code="${u.member_code}">تعيين Admin</button>${S.adminPerms['reports.resolve']?`<button class="btn btn-danger btn-sm am-warning-btn" data-uid="${u.user_id}" data-code="${u.member_code}">إنذار</button>`:''}
           </div>
         </div>`).join('');
-      box.querySelectorAll('.am-grant-btn').forEach(b=>b.onclick=()=>{
+      box.querySelectorAll('.am-warning-btn').forEach(b=>b.onclick=()=>{
+    openModal(`<h3>إصدار تنبيه إداري</h3><p>الحساب: <strong>${b.dataset.code}</strong></p><label>السبب</label><input type="text" id="aw-reason" maxlength="300"><label>الأدلة / الملاحظات</label><textarea id="aw-evidence" maxlength="5000"></textarea><div class="flex gap8" style="justify-content:flex-end;margin-top:12px;"><button class="btn btn-ghost" id="aw-cancel">إلغاء</button><button class="btn btn-danger" id="aw-ok">إصدار</button></div>`,root=>{root.querySelector('#aw-cancel').onclick=closeModal;root.querySelector('#aw-ok').onclick=async()=>{const reason=val('aw-reason');if(!reason){toast('اكتب سبب التنبيه','error');return;}try{await api.adminIssueWarning(b.dataset.uid,reason,val('aw-evidence')||null,null);closeModal();toast('تم إصدار التنبيه','success');}catch(e){toast(friendlyError(e),'error');}};});
+  });
+  box.querySelectorAll('.am-grant-btn').forEach(b=>b.onclick=()=>{
         const uid = b.dataset.uid;
         const roleSelect = box.querySelector(`.am-role-select[data-uid="${uid}"]`);
         const roleCode = roleSelect.value;
