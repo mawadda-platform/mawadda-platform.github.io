@@ -455,7 +455,12 @@ function friendlyError(err){
   if(code==='otp_expired' || /Token has expired or is invalid/i.test(m)) return 'الكود غير صحيح أو منتهي الصلاحية. اطلب كودًا جديدًا وحاول مجددًا.';
   if(code==='over_email_send_rate_limit' || /security purposes|only request this after|rate limit/i.test(m)) return 'لقد طلبت الكود عدة مرات. الرجاء الانتظار قليلًا قبل إعادة المحاولة.';
   if(/Signups not allowed|signup is disabled/i.test(m)) return 'التسجيل غير متاح حاليًا.';
-  if(/permission denied for function|get_candidate_profiles/i.test(m)) return 'تعذر الوصول إلى البحث عن المرشحين بسبب صلاحيات قاعدة البيانات. لم يتم تجاوز الحماية.';
+  if(/permission denied for function/i.test(m)) return 'تعذر الوصول إلى هذه الوظيفة بسبب صلاحيات قاعدة البيانات. لم يتم تجاوز الحماية.';
+  if(/Complete your profile before searching/i.test(m)) return 'أكمل ملفك الشخصي أولًا لتتمكن من استخدام البحث الكامل. يمكنك تصفح الملفات العامة في هذه الأثناء.';
+  if(/Account not eligible to search/i.test(m)) return 'حسابك غير مؤهل لاستخدام البحث حاليًا (الحساب موقوف أو غير نشط).';
+  if(/chk_pref_age/i.test(m)) return 'العمر المدخل يجب أن يكون بين 18 و100 سنة، والحد الأدنى لا يتجاوز الحد الأقصى.';
+  if(/chk_pref_height/i.test(m)) return 'الطول المدخل يجب أن يكون بين 100 و250 سم، والحد الأدنى لا يتجاوز الحد الأقصى.';
+  if(/chk_pref_weight/i.test(m)) return 'الوزن المدخل يجب أن يكون بين 30 و300 كجم، والحد الأدنى لا يتجاوز الحد الأقصى.';
   if(/JWT|not authenticated|Auth session missing/i.test(m)) return 'انتهت صلاحية الجلسة، الرجاء تسجيل الدخول مرة أخرى.';
   if(/different from the old password|same as the old password/i.test(m)) return 'يجب أن تكون كلمة المرور الجديدة مختلفة عن الحالية.';
   if(/Failed to fetch|NetworkError|network/i.test(m)) return 'تعذر الاتصال بالخادم، تحقق من اتصال الإنترنت.';
@@ -497,6 +502,9 @@ const api = {
   getMyPreferences(){ return this.rpc('get_my_preferences'); },
   getCandidateProfiles(filters){ return this.rpc('get_candidate_profiles', filters); },
   getCandidateById(id){ return this.rpc('get_candidate_profile_by_id', {p_candidate_id:id}); },
+  // Public, anon-safe discovery — no session required. Never returns phone/email/sensitive data.
+  getPublicCandidateProfiles(filters){ return this.rpc('get_public_candidate_profiles', filters); },
+  getPublicCandidateById(id){ return this.rpc('get_public_candidate_profile_by_id', {p_candidate_id:id}); },
   getMutualMatches(limit,offset){ return this.rpc('get_mutual_matches', {p_limit:limit||20, p_offset:offset||0}); },
   isAdmin(){ return this.rpc('is_admin'); },
   hasPerm(code){ return this.rpc('has_admin_permission', {p_permission_code:code}); },
@@ -1508,16 +1516,16 @@ async function mountPreferences(app){
     <h2>تفضيلات شريك الحياة</h2>
     <div class="card">
       <div class="row-2">
-        <div><label>الحد الأدنى للعمر</label><input type="number" id="pr-min_age" value="${pr.min_age??''}"></div>
-        <div><label>الحد الأقصى للعمر</label><input type="number" id="pr-max_age" value="${pr.max_age??''}"></div>
+        <div><label>الحد الأدنى للعمر</label><input type="number" id="pr-min_age" min="18" max="100" value="${pr.min_age??''}"></div>
+        <div><label>الحد الأقصى للعمر</label><input type="number" id="pr-max_age" min="18" max="100" value="${pr.max_age??''}"></div>
       </div>
       <div class="row-2">
-        <div><label>الحد الأدنى للطول (سم)</label><input type="number" id="pr-min_height_cm" value="${pr.min_height_cm??''}"></div>
-        <div><label>الحد الأقصى للطول (سم)</label><input type="number" id="pr-max_height_cm" value="${pr.max_height_cm??''}"></div>
+        <div><label>الحد الأدنى للطول (سم)</label><input type="number" id="pr-min_height_cm" min="100" max="250" value="${pr.min_height_cm??''}"></div>
+        <div><label>الحد الأقصى للطول (سم)</label><input type="number" id="pr-max_height_cm" min="100" max="250" value="${pr.max_height_cm??''}"></div>
       </div>
       <div class="row-2">
-        <div><label>الحد الأدنى للوزن (كجم)</label><input type="number" id="pr-min_weight_kg" value="${pr.min_weight_kg??''}"></div>
-        <div><label>الحد الأقصى للوزن (كجم)</label><input type="number" id="pr-max_weight_kg" value="${pr.max_weight_kg??''}"></div>
+        <div><label>الحد الأدنى للوزن (كجم)</label><input type="number" id="pr-min_weight_kg" min="30" max="300" value="${pr.min_weight_kg??''}"></div>
+        <div><label>الحد الأقصى للوزن (كجم)</label><input type="number" id="pr-max_weight_kg" min="30" max="300" value="${pr.max_weight_kg??''}"></div>
       </div>
 
       <label>لون البشرة المفضل</label><div id="chips-skin">${multiChips('skin_tone', pr.skin_tones_preferred)}</div>
@@ -1553,7 +1561,10 @@ async function mountPreferences(app){
   document.querySelectorAll('.chip-select').forEach(chip=> chip.onclick = ()=> chip.classList.toggle('on'));
 
   document.getElementById('pr-save').onclick = async ()=>{
-    const btn = document.getElementById('pr-save'); btn.disabled=true; btn.textContent='جارٍ الحفظ…';
+    const btn = document.getElementById('pr-save');
+    const rangeErr = validatePrefRanges();
+    if(rangeErr){ toast(rangeErr,'error'); return; }
+    btn.disabled=true; btn.textContent='جارٍ الحفظ…';
     try{
       const payload = {
         user_id: S.session.user.id,
@@ -1590,6 +1601,22 @@ async function mountPreferences(app){
     finally{ btn.disabled=false; btn.textContent='حفظ التفضيلات'; }
   };
 }
+// Mirrors DB CHECK constraints on user_preferences (chk_pref_age_bounds/range, height, weight)
+// so invalid input is caught client-side with a clear message instead of a raw 400 from Postgres.
+function validatePrefRanges(){
+  const checks = [
+    {min:'pr-min_age', max:'pr-max_age', lo:18, hi:100, label:'العمر'},
+    {min:'pr-min_height_cm', max:'pr-max_height_cm', lo:100, hi:250, label:'الطول'},
+    {min:'pr-min_weight_kg', max:'pr-max_weight_kg', lo:30, hi:300, label:'الوزن'}
+  ];
+  for(const c of checks){
+    const minV = numOrNull(c.min), maxV = numOrNull(c.max);
+    if(minV!==null && (minV<c.lo || minV>c.hi)) return `الحد الأدنى لـ${c.label} يجب أن يكون بين ${c.lo} و${c.hi}.`;
+    if(maxV!==null && (maxV<c.lo || maxV>c.hi)) return `الحد الأقصى لـ${c.label} يجب أن يكون بين ${c.lo} و${c.hi}.`;
+    if(minV!==null && maxV!==null && minV>maxV) return `الحد الأدنى لـ${c.label} لا يمكن أن يكون أكبر من الحد الأقصى.`;
+  }
+  return null;
+}
 function multiChips(group, currentArr){
   const cur = new Set(currentArr||[]);
   return Object.entries(LABELS[group]).map(([v,t])=>`<span class="chip chip-select ${cur.has(v)?'on':''}" data-v="${v}">${t}</span>`).join('');
@@ -1624,10 +1651,6 @@ async function mountDiscovery(app){
 }
 async function runDiscovery(){
   const box = document.getElementById('disc-results');
-  if(!S.session){
-    box.innerHTML = `<div class="state-box"><div class="icon">🔐</div><h3>البحث الآمن يحتاج إلى حساب</h3><p>بحث المرشحين الحالي يعتمد على RPC محمي في قاعدة البيانات. لم يتم فتحه للزوار قبل التحقق من وجود واجهة Public Safe Discovery منفصلة.</p><div class="flex" style="justify-content:center;gap:8px;margin-top:12px;"><button class="btn btn-primary btn-sm" onclick="navigate('/register')">إنشاء حساب</button><button class="btn btn-outline btn-sm" onclick="navigate('/login')">تسجيل الدخول</button></div></div>`;
-    return;
-  }
   box.innerHTML = loadingBox('جارِ البحث…');
   const filters = {
     p_limit: DISCOVERY_LIMIT, p_offset: discoveryOffset,
@@ -1635,18 +1658,34 @@ async function runDiscovery(){
     p_governorate_id: numOrNull('df-gov'),
     p_marital_statuses: chipsOn('df-marital').length? chipsOn('df-marital') : null
   };
+  // Anonymous visitors: safe public RPC (no phone/email/sensitive fields, no auth required).
+  // Logged-in members: richer private search RPC (more filters, requires a completed profile).
+  let usedPublicFallback = false;
   try{
-    const res = await api.getCandidateProfiles(filters);
+    let res;
+    if(S.session){
+      try{ res = await api.getCandidateProfiles(filters); }
+      catch(privateErr){
+        const pm = (privateErr&&privateErr.message)||'';
+        // Profile not complete yet / account not eligible: don't block browsing — fall back to public view.
+        if(/Complete your profile|not eligible/i.test(pm)){ res = await api.getPublicCandidateProfiles(filters); usedPublicFallback = true; }
+        else throw privateErr;
+      }
+    } else {
+      res = await api.getPublicCandidateProfiles(filters);
+    }
+    const fallbackBanner = usedPublicFallback ? `<div class="state-box" style="margin-bottom:10px;padding:10px 14px;"><p class="muted" style="margin:0;">أكمل ملفك الشخصي لرؤية نتائج بحث أدق ومطابقة لتفضيلاتك. حاليًا تشاهد الملفات العامة فقط. <a style="color:var(--c-primary);font-weight:800;cursor:pointer;" data-nav="/profile">إكمال الملف</a></p></div>` : '';
     if(!res.items || !res.items.length){
-      box.innerHTML = emptyBox('🔍','لا توجد نتائج مطابقة','جرّب تعديل الفلاتر أو إكمال ملفك الشخصي وتفضيلاتك أولًا.');
+      box.innerHTML = fallbackBanner + emptyBox('🔍','لا توجد نتائج مطابقة','جرّب تعديل الفلاتر أو إكمال ملفك الشخصي وتفضيلاتك أولًا.');
       return;
     }
-    box.innerHTML = `<div class="grid grid-3">${res.items.map(candCard).join('')}</div>
+    box.innerHTML = fallbackBanner + `<div class="grid grid-3">${res.items.map(candCard).join('')}</div>
       <div class="flex" style="justify-content:center; gap:10px; margin-top:20px;">
         <button class="btn btn-outline btn-sm" id="disc-prev" ${discoveryOffset===0?'disabled':''}>السابق</button>
         <span class="muted">${discoveryOffset+1}–${discoveryOffset+res.returned_count} من ${res.total_count}</span>
         <button class="btn btn-outline btn-sm" id="disc-next" ${!res.has_more?'disabled':''}>التالي</button>
       </div>`;
+    box.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.dataset.nav));
     box.querySelectorAll('[data-cand]').forEach(el=>el.onclick=()=>navigate('/candidate/'+el.dataset.cand));
     const prev = document.getElementById('disc-prev'); if(prev) prev.onclick=()=>{ discoveryOffset=Math.max(0,discoveryOffset-DISCOVERY_LIMIT); runDiscovery(); };
     const next = document.getElementById('disc-next'); if(next) next.onclick=()=>{ discoveryOffset+=DISCOVERY_LIMIT; runDiscovery(); };
@@ -1679,12 +1718,8 @@ function requireAuthGate(actionLabel='هذه الخاصية'){
 ========================================================= */
 async function mountCandidate(app, id){
   app.innerHTML=loadingBox('جارِ تحميل الملف…');
-  if(!S.session){
-    app.innerHTML=`<div class="container narrow">${emptyBox('🔐','التصفح العام غير متاح حاليًا','وظيفة Public Profiles تحتاج صلاحية آمنة من الـBackend. لم يتم فتح RLS أو تجاوز الصلاحيات من الواجهة.')}</div>`;
-    return;
-  }
   try{
-    const c=await api.getCandidateById(id);
+    const c = S.session ? await api.getCandidateById(id) : await api.getPublicCandidateById(id);
     if(!c){app.innerHTML=emptyBox('🚫','هذا الملف غير متاح','قد يكون غير مكتمل أو غير متاح وفق صلاحيات النظام.');return;}
     const gov=c.governorate?c.governorate.name_ar:'غير محدد';
     const traits=(c.personality_traits||[]).map(t=>`<span class="chip">${L('personality_trait',t)}</span>`).join('')||'<span class="muted">لا يوجد</span>';
@@ -1706,11 +1741,7 @@ async function mountCandidate(app, id){
       });
     };
   }catch(e){
-    const msg=(e&&e.message)||'';
-    app.innerHTML=errorBox(e);
-    if(!S.session && /auth|jwt|permission|not authenticated/i.test(msg)){
-      app.innerHTML=`<div class="container narrow">${emptyBox('🔐','التصفح العام غير متاح حاليًا','وظيفة Public Profiles تحتاج صلاحية آمنة من الـBackend. لم يتم فتح RLS أو تجاوز الصلاحيات من الواجهة.')}</div>`;
-    }
+    app.innerHTML=`<div class="container narrow">${errorBox(e)}</div>`;
   }
 }
 
