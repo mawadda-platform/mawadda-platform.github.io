@@ -607,6 +607,27 @@ const LABELS = {
 function L(group,val){ if(val===null||val===undefined) return '—'; return (LABELS[group]&&LABELS[group][val])||val; }
 function opts(group){ return Object.entries(LABELS[group]).map(([v,t])=>`<option value="${v}">${t}</option>`).join(''); }
 
+// Ready-made cartoon avatars — matches the existing DB enum public.avatar_type exactly
+// (male_no_beard, male_light_beard, male_full_beard, male_style_alt,
+//  female_style_1..4). No upload, no Storage — purely a fixed emoji per stored avatar_id.
+const AVATARS = {
+  male_no_beard:{emoji:'🧑',label:'رجل بدون لحية'},
+  male_light_beard:{emoji:'🧔🏻',label:'رجل بلحية خفيفة'},
+  male_full_beard:{emoji:'🧔',label:'رجل بلحية كاملة'},
+  male_style_alt:{emoji:'👨‍🦱',label:'رجل — مظهر مختلف'},
+  female_style_1:{emoji:'🧕',label:'امرأة — الطراز 1'},
+  female_style_2:{emoji:'👩🏻‍🦱',label:'امرأة — الطراز 2'},
+  female_style_3:{emoji:'👩🏻‍🦰',label:'امرأة — الطراز 3'},
+  female_style_4:{emoji:'👩🏻',label:'امرأة — الطراز 4'}
+};
+function avatarEmoji(avatarId){ return (AVATARS[avatarId]&&AVATARS[avatarId].emoji) || '👤'; }
+function avatarsForGender(gender){
+  const keys = gender==='female' ? ['female_style_1','female_style_2','female_style_3','female_style_4']
+             : gender==='male' ? ['male_no_beard','male_light_beard','male_full_beard','male_style_alt']
+             : Object.keys(AVATARS);
+  return keys;
+}
+
 /* =========================================================
    17. UI HELPERS — toast / modal / loading
 ========================================================= */
@@ -635,6 +656,7 @@ function friendlyError(err){
   if(code==='over_email_send_rate_limit' || /security purposes|only request this after|rate limit/i.test(m)) return 'لقد طلبت الكود عدة مرات. الرجاء الانتظار قليلًا قبل إعادة المحاولة.';
   if(/Signups not allowed|signup is disabled/i.test(m)) return 'التسجيل غير متاح حاليًا.';
   if(/permission denied for function/i.test(m)) return 'تعذر الوصول إلى هذه الوظيفة بسبب صلاحيات قاعدة البيانات. لم يتم تجاوز الحماية.';
+  if(/Insufficient privileges/i.test(m)) return 'لا تملك صلاحية كافية لعرض هذه البيانات.';
   if(/Complete your profile before searching/i.test(m)) return 'أكمل ملفك الشخصي أولًا لتتمكن من استخدام البحث الكامل. يمكنك تصفح الملفات العامة في هذه الأثناء.';
   if(/Account not eligible to search/i.test(m)) return 'حسابك غير مؤهل لاستخدام البحث حاليًا (الحساب موقوف أو غير نشط).';
   if(/Complete your profile before viewing profiles/i.test(m)) return 'أكمل ملفك الشخصي أولًا لتتمكن من عرض ملفات الأعضاء الآخرين.';
@@ -731,6 +753,8 @@ const api = {
   adminReview(requestId, decision, reason){ return this.rpc('admin_review_marriage_request', {p_request_id:requestId, p_decision:decision, p_reason:reason||null}); },
   adminListAdmins(){ return this.rpc('admin_list_admins'); },
   adminSearchUsersBasic(search){ return this.rpc('admin_search_users_basic', {p_search:search||null}); },
+  adminListAllAccounts(){ return this.rpc('admin_list_all_accounts'); },
+  upsertMyPhone(phone){ return this.rpc('upsert_my_phone', {p_phone:phone}); },
   adminGrantRole(userId, roleCode){ return this.rpc('admin_grant_role', {p_user_id:userId, p_role_code:roleCode}); },
   adminRevokeRole(userId, roleCode){ return this.rpc('admin_revoke_role', {p_user_id:userId, p_role_code:roleCode}); },
   isSuperAdmin(){ return this.rpc('is_super_admin'); },
@@ -895,8 +919,8 @@ async function loadAccountContext(){
   try{
     S.isAdmin = await api.isAdmin();
     if(S.isAdmin){
-      const [rv, rr, am, mm] = await Promise.all([api.hasPerm('requests.view'), api.hasPerm('requests.review'), api.hasPerm('admins.manage'), api.hasPerm('messages.moderate')]);
-      S.adminPerms = {'requests.view':rv, 'requests.review':rr, 'admins.manage':am, 'messages.moderate':mm};
+      const [rv, rr, am, mm, uv, rres] = await Promise.all([api.hasPerm('requests.view'), api.hasPerm('requests.review'), api.hasPerm('admins.manage'), api.hasPerm('messages.moderate'), api.hasPerm('users.view'), api.hasPerm('reports.resolve')]);
+      S.adminPerms = {'requests.view':rv, 'requests.review':rr, 'admins.manage':am, 'messages.moderate':mm, 'users.view':uv, 'reports.resolve':rres};
     }
   }catch(e){ S.isAdmin=false; }
 }
@@ -1773,6 +1797,7 @@ function renderProfileShell(app, full, sensitive){
   <div class="container">
     <h2>ملفي الشخصي</h2>
     <div class="tabs" id="profile-tabs">
+      <div class="tab" data-t="account">00 الملف الشخصي الخاص بي</div>
       <div class="tab" data-t="basic">01 الأساسية</div>
       <div class="tab" data-t="lifestyle">02 السكن والحياة</div>
       <div class="tab" data-t="traits">03 الصفات</div>
@@ -1786,11 +1811,123 @@ function renderProfileShell(app, full, sensitive){
     el.onclick = ()=>{ profileTab = el.dataset.t; renderProfileShell(app, full, sensitive); };
   });
   const panel = document.getElementById('profile-panel');
-  if(profileTab==='basic') renderBasicForm(panel, p);
+  if(profileTab==='account') renderAccountForm(panel, p);
+  else if(profileTab==='basic') renderBasicForm(panel, p);
   else if(profileTab==='lifestyle') renderLifestyleForm(panel, l);
   else if(profileTab==='traits') renderTraitsForm(panel, t);
   else if(profileTab==='children') renderChildrenPanel(panel, p, children);
   else if(profileTab==='sensitive') renderSensitiveForm(panel, sensitive);
+}
+
+// "الملف الشخصي الخاص بي" — member code (read-only), name/email/phone/governorate/city/village.
+// Reads: S.account (user_accounts row, already fetched under its own RLS "select own" policy —
+// gives member_code + phone_e164) and S.session.user.email (the person's own Supabase Auth
+// session — no RPC needed to read one's own email). Writes: full_name/governorate_id/city_id/
+// village_area go through the existing user_profiles UPDATE-own RLS policy (same table the
+// "الأساسية" tab already writes to); phone goes through the existing upsert_my_phone() RPC,
+// which is the only sanctioned way to change user_accounts.phone_e164 (no direct UPDATE policy
+// exists on user_accounts, by design). member_code is never sent in any payload — it cannot be
+// edited from here, matching prevent_member_code_update().
+function renderAccountForm(panel, p){
+  ensureGeo();
+  const acc = S.account || {};
+  const email = (S.session && S.session.user && S.session.user.email) || '';
+  panel.innerHTML = `
+    <div class="row-2">
+      <div><label>كود العضو</label><input type="text" value="${acc.member_code||'—'}" disabled></div>
+      <div><label>حالة الحساب</label><input type="text" value="${L('request_status', acc.status)!==acc.status ? L('request_status', acc.status) : (acc.status||'—')}" disabled></div>
+    </div>
+    <label>الاسم</label><input type="text" id="ac-full_name" value="${p.full_name||''}">
+    <label>البريد الإلكتروني المرتبط بالحساب</label><input type="email" value="${email}" disabled>
+    <div class="hint">البريد المرتبط بحساب الدخول (Auth) — لا يمكن تعديله من هنا.</div>
+    <label>رقم الهاتف</label><input type="tel" id="ac-phone" value="${acc.phone_e164||''}" placeholder="01xxxxxxxxx">
+    <div class="row-2">
+      <div><label>المحافظة</label><select id="ac-governorate_id"><option value="">اختر</option></select></div>
+      <div><label>المركز</label><select id="ac-city_id"><option value="">اختر المحافظة أولًا</option></select></div>
+    </div>
+    <div id="ac-village_area-wrap" style="display:none;">
+      <label>المنطقة / القرية / النجع <span style="color:var(--c-danger);">*</span></label>
+      <input type="text" id="ac-village_area" maxlength="150" value="${p.village_area||''}">
+    </div>
+    <label>الصورة الرمزية (Avatar)</label>
+    <div class="hint" style="margin-bottom:8px;">اختر صورة كارتونية جاهزة تعبر عنك — لا يوجد رفع صور شخصية حقيقية.</div>
+    <div id="ac-avatar-grid" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px;"></div>
+    <button class="btn btn-primary btn-block" id="ac-save" style="margin-top:16px;">حفظ الملف الشخصي</button>
+  `;
+  let selectedAvatar = p.avatar_id || null;
+  function renderAvatarGrid(){
+    const grid = document.getElementById('ac-avatar-grid');
+    const keys = avatarsForGender(p.gender);
+    grid.innerHTML = keys.map(k=>`
+      <div class="ac-avatar-opt" data-avatar="${k}" style="cursor:pointer;text-align:center;padding:8px;border-radius:14px;border:2px solid ${selectedAvatar===k?'var(--c-primary)':'var(--c-border)'};background:${selectedAvatar===k?'var(--c-accent-light)':'transparent'};width:78px;">
+        <div style="font-size:30px;">${AVATARS[k].emoji}</div>
+        <div style="font-size:10.5px;margin-top:4px;">${AVATARS[k].label}</div>
+      </div>`).join('');
+    grid.querySelectorAll('.ac-avatar-opt').forEach(el=>{
+      el.onclick = ()=>{ selectedAvatar = el.dataset.avatar; renderAvatarGrid(); };
+    });
+  }
+  renderAvatarGrid();
+  const govSel = document.getElementById('ac-governorate_id');
+  const citySel = document.getElementById('ac-city_id');
+  const villageWrap = document.getElementById('ac-village_area-wrap');
+  const villageInput = document.getElementById('ac-village_area');
+  function syncVillageVisibility(){
+    if(citySel.value){ villageWrap.style.display='block'; }
+    else{ villageWrap.style.display='none'; villageInput.value=''; }
+  }
+  async function fillGov(){
+    await ensureGeo();
+    govSel.innerHTML = `<option value="">اختر</option>` + S.governorates.map(g=>`<option value="${g.id}" ${p.governorate_id==g.id?'selected':''}>${g.name_ar}</option>`).join('');
+    await fillCities(p.governorate_id);
+    syncVillageVisibility();
+  }
+  async function fillCities(govId){
+    if(!govId){ citySel.innerHTML = `<option value="">اختر المحافظة أولًا</option>`; syncVillageVisibility(); return; }
+    const {data} = await sb.from('geo_cities').select('*').eq('governorate_id', govId).eq('is_active',true).order('sort_order');
+    if(!data || !data.length){ citySel.innerHTML = `<option value="">لا توجد مدن متاحة حاليًا لهذه المحافظة</option>`; syncVillageVisibility(); return; }
+    citySel.innerHTML = `<option value="">اختر</option>` + data.map(c=>`<option value="${c.id}" ${p.city_id==c.id?'selected':''}>${c.name_ar}</option>`).join('');
+    syncVillageVisibility();
+  }
+  fillGov();
+  govSel.onchange = (e)=>fillCities(e.target.value);
+  citySel.onchange = syncVillageVisibility;
+
+  document.getElementById('ac-save').onclick = async ()=>{
+    const btn = document.getElementById('ac-save');
+    if(citySel.value && !val('ac-village_area')){
+      toast('المنطقة / القرية / النجع إجباري بعد اختيار المركز','error');
+      villageInput.focus();
+      return;
+    }
+    btn.disabled=true; btn.textContent='جارٍ الحفظ…';
+    try{
+      // 1) Phone — only through the existing phone RPC/system, only if changed.
+      const newPhone = val('ac-phone');
+      if(newPhone && newPhone !== (acc.phone_e164||'')){
+        await api.upsertMyPhone(newPhone);
+      }
+      // 2) Name / geography / avatar — same table + RLS the "الأساسية" tab already uses.
+      // member_code is intentionally never included (immutable, enforced by DB trigger too).
+      const payload = {
+        user_id: S.session.user.id,
+        full_name: val('ac-full_name'),
+        governorate_id: numOrNull('ac-governorate_id'),
+        city_id: numOrNull('ac-city_id'),
+        village_area: citySel.value ? val('ac-village_area') : null,
+        avatar_id: selectedAvatar || null
+      };
+      const {error} = await sb.from('user_profiles').upsert(payload, {onConflict:'user_id'});
+      if(error) throw error;
+      // Refresh cached account (phone) + profile completion state so the rest of the UI stays in sync.
+      const {data: acc2} = await sb.from('user_accounts').select('*').eq('id', S.session.user.id).maybeSingle();
+      if(acc2) S.account = acc2;
+      toast('تم حفظ الملف الشخصي الخاص بك','success');
+      S.profileStatus = await api.getProfileCompletion();
+      await mountProfile(document.getElementById('app'));
+    }catch(e){ toast(friendlyError(e),'error'); }
+    finally{ btn.disabled=false; btn.textContent='حفظ الملف الشخصي'; }
+  };
 }
 
 function renderBasicForm(panel, p){
@@ -2239,7 +2376,7 @@ function candCard(c){
   const gov = c.governorate ? c.governorate.name_ar : 'غير محدد';
   const traits = (c.personality_traits||[]).slice(0,3).map(t=>`<span class="chip">${L('personality_trait',t)}</span>`).join('');
   return `<div class="cand-card" data-cand="${c.candidate_id}">
-    <div class="cand-top"><span class="cand-age">${c.age??'—'} سنة</span><span class="badge badge-muted">${L('gender',c.gender)}</span></div>
+    <div class="cand-top"><span style="font-size:30px;">${avatarEmoji(c.avatar_id)}</span><span class="cand-age">${c.age??'—'} سنة</span><span class="badge badge-muted">${L('gender',c.gender)}</span></div>
     <p class="mb0">📍 ${gov}</p>
     <p class="mb0">🎓 ${L('education_level',c.education_level)}</p>
     <p class="mb0">💍 ${L('marital_status',c.marital_status)}</p>
@@ -2271,7 +2408,7 @@ async function mountCandidate(app, id){
     const traits=(c.personality_traits||[]).map(t=>`<span class="chip">${L('personality_trait',t)}</span>`).join('')||'<span class="muted">لا يوجد</span>';
     app.innerHTML=`<div class="container narrow">
       <button class="btn btn-ghost btn-sm" data-back>→ رجوع للاستكشاف</button>
-      <div class="profile-section" style="margin-top:12px;"><div class="cand-summary"><div class="cand-avatar">👤</div><div><div class="eyebrow">ملف مرشح</div><h2>${c.age??'—'} سنة</h2><span class="badge badge-muted">${L('gender',c.gender)}</span></div></div>
+      <div class="profile-section" style="margin-top:12px;"><div class="cand-summary"><div class="cand-avatar">${avatarEmoji(c.avatar_id)}</div><div><div class="eyebrow">ملف مرشح</div><h2>${c.age??'—'} سنة</h2><span class="badge badge-muted">${L('gender',c.gender)}</span></div></div>
       <div class="profile-section"><h3>البيانات الأساسية</h3><p><strong>الحالة الاجتماعية:</strong> ${L('marital_status',c.marital_status)}</p><p><strong>المحافظة:</strong> ${gov}</p><p><strong>المؤهل الدراسي:</strong> ${L('education_level',c.education_level)}</p></div>
       <div class="profile-section"><h3>التعليم والعمل</h3><p><strong>استقرار العمل:</strong> ${L('work_stability',c.work_stability)}</p></div>
       <div class="profile-section"><h3>السكن ونمط الحياة</h3><p><strong>الحالة السكنية:</strong> ${L('housing_status',c.housing_status)}</p><p><strong>الاستعداد للانتقال:</strong> ${L('relocation_willingness',c.relocation_willingness)}</p></div>
@@ -2475,6 +2612,7 @@ async function mountAdmin(app){
     <div class="page-heading"><div><div class="eyebrow">Administration</div><h2>لوحة الإدارة</h2><p class="mb0">إدارة الطلبات والسلامة والبلاغات والتنبيهات والصلاحيات.</p></div></div>
     <div class="admin-nav"><div class="admin-group"><h4>Management</h4><p class="mb0">طلبات الزواج والمستخدمون.</p></div><div class="admin-group"><h4>Safety</h4><p class="mb0">البلاغات والتنبيهات والإيقاف.</p></div><div class="admin-group"><h4>Contact</h4><p class="mb0">مراجعة كشف بيانات الاتصال بعد القبول المتبادل.</p></div><div class="admin-group"><h4>Audit</h4><p class="mb0">التغييرات الحساسة تسجل في سجل التدقيق الموجود.</p></div></div>
     <div class="section-title"><h3>طلبات الزواج بانتظار المراجعة</h3></div><div id="admin-req-list">${loadingBox()}</div>
+    ${S.adminPerms['users.view'] ? `<div class="section-title"><h3>الحسابات — Member Code ↔ Account ↔ Auth</h3></div><div class="card card-tight" style="margin-bottom:10px;"><p class="mb0 muted" style="font-size:12.5px;">لكل عضو: كود العضو، معرّف الحساب الداخلي (user_accounts.id)، وحساب الدخول المرتبط (بريد عادي أو Google) — دون كشف الهاتف. للاطلاع على الهاتف استخدم صلاحية phone.view من داخل الطلبات/الشكاوى ذات الصلة.</p><div class="flex gap8" style="margin-top:10px;"><input type="text" id="aa-filter" placeholder="فلترة بكود العضو أو البريد…" style="flex:1;"></div></div><div id="admin-all-accounts">${loadingBox()}</div>` : ''}
     ${S.adminPerms['messages.moderate'] ? `<div class="section-title"><h3>محادثات الأعضاء</h3></div><div class="grid grid-2"><div id="admin-chat-thread-list">${loadingBox()}</div><div id="admin-chat-messages-panel" class="card"><p class="muted">اختر محادثة من القائمة.</p></div></div>` : ''}
     ${canManageAdmins ? `<div class="section-title"><h3>إضافة أدمن / أدمن مساعد</h3></div><div class="card"><div class="flex-between"><h4 class="mb0">ابحث بـ Member Code أو حساب Google / البريد الإلكتروني</h4></div><p class="mb0 muted" style="font-size:12.5px;margin-top:4px;">مخصص لإسناد أحد الأدوار التالية لحساب موجود بالفعل: ADMIN، MODERATOR، VERIFICATION_ADMIN، SUPPORT_ADMIN. لا يمكن من هنا منح أو تعديل SUPER_ADMIN.</p><div class="flex gap8" style="margin-top:10px;"><input type="text" id="am-search" placeholder="MW-.... أو example@gmail.com" style="flex:1;"><button class="btn btn-outline btn-sm" id="am-search-btn">بحث</button></div><div id="am-search-results" style="margin-top:12px;"></div></div><div class="section-title"><h3>المشرفون الحاليون</h3></div><div id="am-admins-list">${loadingBox()}</div>`:''}
     <div class="section-title"><h3>بلاغات المستخدمين</h3></div><div id="admin-complaints">${loadingBox()}</div>
@@ -2482,9 +2620,45 @@ async function mountAdmin(app){
     <div class="section-title"><h3>طلبات كشف بيانات الاتصال</h3></div><div id="admin-disclosures">${loadingBox()}</div>
   </div>`;
   await renderAdminRequests();
+  if(S.adminPerms['users.view']) await renderAdminAllAccounts();
   if(S.adminPerms['messages.moderate']) await renderAdminChatThreads();
   if(canManageAdmins){ mountAdminManagement(); await renderAdminsList(); }
   await renderAdminComplaints(); await renderAdminWarnings(); await renderAdminDisclosures();
+}
+
+let adminAllAccountsCache = null;
+async function renderAdminAllAccounts(){
+  const box = document.getElementById('admin-all-accounts');
+  if(!box) return;
+  try{
+    if(!adminAllAccountsCache) adminAllAccountsCache = await api.adminListAllAccounts();
+    const rows = adminAllAccountsCache;
+    const filterEl = document.getElementById('aa-filter');
+    const q = (filterEl && filterEl.value.trim().toLowerCase()) || '';
+    const filtered = q ? rows.filter(r=>
+      (r.member_code||'').toLowerCase().includes(q) ||
+      (r.email||'').toLowerCase().includes(q) ||
+      (r.google_email||'').toLowerCase().includes(q) ||
+      (r.full_name||'').toLowerCase().includes(q)
+    ) : rows;
+    if(!filtered.length){ box.innerHTML = emptyBox('🔍','لا نتائج','لا توجد حسابات مطابقة.'); return; }
+    box.innerHTML = filtered.map(r=>{
+      const authLine = r.google_email
+        ? `<p class="mb0 muted">Google: ${r.google_email}</p>`
+        : (r.email ? `<p class="mb0 muted">Email: ${r.email}</p>` : `<p class="mb0 muted">—</p>`);
+      return `<div class="card card-tight" style="margin-bottom:8px;">
+        <p class="mb0"><strong>Member Code: ${r.member_code}</strong>${r.full_name?` · ${r.full_name}`:''}</p>
+        <p class="mb0 muted" style="font-size:12px;">Account ID: ${r.account_id}</p>
+        ${authLine}
+        <p class="mb0 muted" style="font-size:12px;">الحالة: ${r.status} — أُنشئ: ${new Date(r.created_at).toLocaleDateString('ar-EG')}</p>
+      </div>`;
+    }).join('');
+  }catch(e){ box.innerHTML = errorBox(e); }
+  const filterEl = document.getElementById('aa-filter');
+  if(filterEl && !filterEl.dataset.wired){
+    filterEl.dataset.wired = '1';
+    filterEl.oninput = ()=>renderAdminAllAccounts();
+  }
 }
 
 let adminChatActiveThreadId = null;
