@@ -283,8 +283,8 @@ textarea{min-height:110px;}
 .auth-card .auth-mark{font-size:34px;margin-bottom:10px;}
 .auth-card h2{font-size:28px;}
 .auth-note{padding:12px 14px;background:var(--c-surface-2);border-radius:12px;margin:14px 0;font-size:13px;color:var(--c-text-muted);}
-.otp-boxes{display:flex;gap:8px;justify-content:center;direction:ltr;margin:18px 0 6px;}
-.otp-box{width:44px;height:52px;text-align:center;font-size:22px;font-weight:900;border:1.5px solid var(--c-border);border-radius:10px;background:var(--c-bg);color:var(--c-text);}
+.otp-boxes{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;direction:ltr;margin:18px 0 6px;}
+.otp-box{width:38px;height:48px;text-align:center;font-size:20px;font-weight:900;border:1.5px solid var(--c-border);border-radius:10px;background:var(--c-bg);color:var(--c-text);}
 .otp-box:focus{outline:none;border-color:var(--c-primary);}
 .otp-box.otp-err{border-color:var(--c-danger);}
 .otp-countdown{text-align:center;font-size:13px;color:var(--c-text-muted);margin-top:4px;}
@@ -326,6 +326,8 @@ textarea{min-height:110px;}
   .status-flow{grid-template-columns:repeat(2,1fr);}
   .page-heading{align-items:flex-start;flex-direction:column;}
   .auth-card{padding:22px;}
+  .otp-box{width:30px;height:42px;font-size:17px;}
+  .otp-boxes{gap:5px;}
 }
 
 </style>
@@ -498,7 +500,7 @@ async function doSignUp(email, password){
   if(error) throw error;
   return data;
 }
-// Verifies the 6-digit code the user typed in. type:'email' is the current (non-deprecated) OTP type
+// Verifies the code the user typed in (length = OTP_LENGTH). type:'email' is the current (non-deprecated) OTP type
 // for both signup and sign-in confirmation in supabase-js v2 ('signup' is accepted but deprecated).
 // On success this returns a real session — no separate sign-in call is needed afterwards.
 async function verifyEmailOtp(email, token){
@@ -520,6 +522,11 @@ async function doSignIn(email, password){
 }
 
 /* ---- OTP resend cooldown (client-side anti-spam; server also rate-limits) ---- */
+// Single source of truth for the code length. Supabase is currently sending 8-digit codes to
+// this project's Confirm-signup emails (confirmed against a real inbox), so every place that
+// builds input boxes, validates length, or slices pasted text reads from this constant instead
+// of assuming 6. If the project's OTP length ever changes again, only this line needs editing.
+const OTP_LENGTH = 8;
 const OTP_COOLDOWN_SECONDS = 60;
 function otpCooldownKey(email){ return 'mawadda_otp_cd_' + email.trim().toLowerCase(); }
 function setOtpCooldown(email, seconds){
@@ -768,7 +775,7 @@ function mountAuthForm(mode){
         }
         if(data.session){ await sb.auth.signOut(); }
         setOtpCooldown(email); // signUp already triggered the first OTP email
-        toast('تم إنشاء حسابك بنجاح. أرسلنا كود تأكيد مكوّنًا من 6 أرقام إلى بريدك الإلكتروني.','success');
+        toast(`تم إنشاء حسابك بنجاح. أرسلنا كود تأكيد مكوّنًا من ${OTP_LENGTH} أرقام إلى بريدك الإلكتروني.`,'success');
         startOtpFlow(email, 'register');
       } else {
         const data = await doSignIn(email, password);
@@ -808,10 +815,10 @@ function viewVerifyOtp(){
   const email = S.otp ? S.otp.email : '';
   return `<div class="auth-shell"><div class="auth-card">
     <div class="auth-mark">🔐</div><div class="eyebrow">خطوة أخيرة</div><h2>تأكيد البريد الإلكتروني</h2>
-    <p>تم إنشاء حسابك بنجاح.<br>أرسلنا كود تأكيد مكوّنًا من 6 أرقام إلى بريدك الإلكتروني:<br><strong style="color:var(--c-text);">${email}</strong></p>
+    <p>تم إنشاء حسابك بنجاح.<br>أرسلنا كود تأكيد مكوّنًا من ${OTP_LENGTH} أرقام إلى بريدك الإلكتروني:<br><strong style="color:var(--c-text);">${email}</strong></p>
     <div id="otp-error"></div>
     <div class="otp-boxes" id="otp-boxes">
-      ${Array.from({length:6}).map((_,i)=>`<input class="otp-box" id="otp-${i}" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="${i===0?'one-time-code':'off'}">`).join('')}
+      ${Array.from({length:OTP_LENGTH}).map((_,i)=>`<input class="otp-box" id="otp-${i}" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="${i===0?'one-time-code':'off'}">`).join('')}
     </div>
     <button class="btn btn-primary btn-block" id="otp-confirm" style="margin-top:14px;">تأكيد الكود</button>
     <div class="otp-countdown" id="otp-countdown-wrap">
@@ -828,7 +835,7 @@ function mountVerifyOtp(){
   if(!S.otp || !S.otp.email){ navigate('/register'); return; }
   const email = S.otp.email;
   const purpose = S.otp.purpose;
-  const boxes = Array.from({length:6}, (_,i)=>document.getElementById('otp-'+i));
+  const boxes = Array.from({length:OTP_LENGTH}, (_,i)=>document.getElementById('otp-'+i));
   const errBox = document.getElementById('otp-error');
   const confirmBtn = document.getElementById('otp-confirm');
   const resendEl = document.getElementById('otp-resend');
@@ -839,7 +846,7 @@ function mountVerifyOtp(){
     box.addEventListener('input', ()=>{
       box.value = box.value.replace(/[^0-9]/g,'').slice(0,1);
       box.classList.remove('otp-err');
-      if(box.value && i<5) boxes[i+1].focus();
+      if(box.value && i<OTP_LENGTH-1) boxes[i+1].focus();
     });
     box.addEventListener('keydown', (e)=>{
       if(e.key==='Backspace' && !box.value && i>0){ boxes[i-1].focus(); }
@@ -848,8 +855,8 @@ function mountVerifyOtp(){
       const text = (e.clipboardData||window.clipboardData).getData('text').replace(/[^0-9]/g,'');
       if(!text) return;
       e.preventDefault();
-      text.slice(0,6).split('').forEach((ch,idx)=>{ if(boxes[idx]){ boxes[idx].value = ch; } });
-      const next = Math.min(text.length,6)-1;
+      text.slice(0,OTP_LENGTH).split('').forEach((ch,idx)=>{ if(boxes[idx]){ boxes[idx].value = ch; } });
+      const next = Math.min(text.length,OTP_LENGTH)-1;
       if(boxes[next]) boxes[next].focus();
     });
   });
@@ -860,7 +867,7 @@ function mountVerifyOtp(){
   async function doConfirm(){
     const code = collectCode();
     errBox.innerHTML='';
-    if(code.length!==6){ errBox.innerHTML = `<p class="field-error">أدخل الكود المكوّن من 6 أرقام كاملًا.</p>`; markInvalid(); return; }
+    if(code.length!==OTP_LENGTH){ errBox.innerHTML = `<p class="field-error">أدخل الكود المكوّن من ${OTP_LENGTH} أرقام كاملًا.</p>`; markInvalid(); return; }
     confirmBtn.disabled = true; confirmBtn.textContent='جارٍ التحقق…';
     try{
       const data = await verifyEmailOtp(email, code);
