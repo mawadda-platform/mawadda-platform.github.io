@@ -400,7 +400,8 @@ const S = {
   params: {},
   authBusy: false,
   // Email OTP confirmation flow (replaces confirmation-link flow)
-  otp: null // { email, purpose: 'register'|'login' } while the OTP screen is active
+  otp: null, // { email, purpose: 'register'|'login'|'password_reset' } while the OTP screen is active
+  recovery: null // { email } once a recovery OTP has been verified; required to access /reset-password
 };
 
 const LABELS = {
@@ -456,6 +457,7 @@ function friendlyError(err){
   if(/Signups not allowed|signup is disabled/i.test(m)) return 'التسجيل غير متاح حاليًا.';
   if(/permission denied for function|get_candidate_profiles/i.test(m)) return 'تعذر الوصول إلى البحث عن المرشحين بسبب صلاحيات قاعدة البيانات. لم يتم تجاوز الحماية.';
   if(/JWT|not authenticated|Auth session missing/i.test(m)) return 'انتهت صلاحية الجلسة، الرجاء تسجيل الدخول مرة أخرى.';
+  if(/different from the old password|same as the old password/i.test(m)) return 'يجب أن تكون كلمة المرور الجديدة مختلفة عن الحالية.';
   if(/Failed to fetch|NetworkError|network/i.test(m)) return 'تعذر الاتصال بالخادم، تحقق من اتصال الإنترنت.';
   return 'تعذر تنفيذ العملية الآن. حاول مرة أخرى.';
 }
@@ -533,6 +535,36 @@ async function doSignIn(email, password){
   if(error) throw error;
   return data;
 }
+
+/* ---- Forgot / Reset password (Recovery OTP — no link, same philosophy as signup OTP) ---- */
+// resetPasswordForEmail() triggers Supabase's "Reset Password" email template (a template SEPARATE
+// from "Confirm signup"). No redirectTo is passed, for the same reason signUp() has none: we never
+// want the clicked-link flow. As long as that template contains {{ .Token }}, this sends a numeric
+// code. Like signUp(), GoTrue does not reveal whether the email exists (anti-enumeration) — it
+// resolves the same way either way, so the caller must always show a neutral message.
+async function sendRecoveryOtp(email){
+  const {data, error} = await sb.auth.resetPasswordForEmail(email);
+  if(error) throw error;
+  return data;
+}
+// type:'recovery' is the documented verifyOtp type for a password-reset code — distinct from the
+// type:'email' used for signup/login confirmation above. Success returns a session that is already
+// active on this client (supabase-js persists it internally), which updateUser() below relies on.
+async function verifyRecoveryOtp(email, token){
+  const {data, error} = await sb.auth.verifyOtp({ email, token, type: 'recovery' });
+  if(error) throw error;
+  return data;
+}
+// resend() has no 'recovery' type in its enum (only 'signup'|'email_change'|'sms'|'phone_change'),
+// so — per Supabase's own docs — a recovery code is "resent" by calling resetPasswordForEmail()
+// again, not by calling resend(). Reusing resendSignupOtp() here would silently call the wrong
+// endpoint, so this is a separate function.
+async function resendRecoveryOtp(email){ return sendRecoveryOtp(email); }
+async function updatePassword(newPassword){
+  const {data, error} = await sb.auth.updateUser({ password: newPassword });
+  if(error) throw error;
+  return data;
+}
 // OAuth (Google/Facebook). This only works once the provider is actually enabled with real
 // Client ID/Secret in Supabase Dashboard → Authentication → Providers; until then Supabase itself
 // returns an error (e.g. "Unsupported provider") which friendlyError() will surface as-is.
@@ -602,7 +634,7 @@ async function ensureGeo(){
 /* =========================================================
    5. ROUTER / VIEW MANAGER
 ========================================================= */
-const PUBLIC_ROUTES = ['/','/login','/register','/discovery','/verify-otp'];
+const PUBLIC_ROUTES = ['/','/login','/register','/discovery','/verify-otp','/forgot-password','/reset-password'];
 const PUBLIC_PREFIXES = ['/candidate/'];
 function currentHash(){ return location.hash.replace(/^#/,'') || '/'; }
 function navigate(path){ location.hash = path; }
@@ -635,8 +667,12 @@ async function render(){
       case 'login': app.innerHTML = viewLogin(); mountAuthForm('login'); break;
       case 'register': app.innerHTML = viewRegister(); mountAuthForm('register'); break;
       case 'verify-otp':
-        if(!S.otp || !S.otp.email){ navigate('/register'); return; }
+        if(!S.otp || !S.otp.email){ navigate('/login'); return; }
         app.innerHTML = viewVerifyOtp(); mountVerifyOtp(); break;
+      case 'forgot-password': app.innerHTML = viewForgotPassword(); mountForgotPassword(); break;
+      case 'reset-password':
+        if(!S.recovery || !S.recovery.email){ navigate('/forgot-password'); return; }
+        app.innerHTML = viewResetPassword(); mountResetPassword(); break;
       case 'dashboard': await mountDashboard(app); break;
       case 'profile': await mountProfile(app); break;
       case 'preferences': await mountPreferences(app); break;
@@ -753,7 +789,8 @@ function viewLogin(){
     <div id="auth-error"></div><label>البريد الإلكتروني</label><input type="email" id="f-email" autocomplete="email">
     <label>كلمة المرور</label>
     <div class="pw-field"><input type="password" id="f-password" autocomplete="current-password"><button type="button" class="pw-toggle" id="f-password-toggle" aria-label="إظهار كلمة المرور">👁️</button></div>
-    <button class="btn btn-primary btn-block" id="f-submit" style="margin-top:18px;">دخول</button>
+    <p style="margin-top:6px;"><a id="f-forgot-link" style="color:var(--c-primary);font-weight:800;cursor:pointer;font-size:13.5px;">هل نسيت كلمة المرور؟</a></p>
+    <button class="btn btn-primary btn-block" id="f-submit" style="margin-top:10px;">دخول</button>
     <div class="oauth-divider">أو</div>
     <div class="oauth-row">${oauthButtonsHtml()}</div>
     <div class="auth-note">لا تملك حسابًا؟ يمكنك إنشاء حساب جديد أو متابعة التصفح العام دون تسجيل.</div>
@@ -789,6 +826,43 @@ function viewRegister(){
   </div></div>`;
 }
 
+/* =========================================================
+   PUBLIC — Forgot password (step 1: request a recovery OTP)
+========================================================= */
+function viewForgotPassword(){
+  return `<div class="auth-shell"><div class="auth-card">
+    <div class="auth-mark">🔑</div><div class="eyebrow">استعادة الحساب</div><h2>استعادة كلمة المرور</h2>
+    <p>أدخل بريدك الإلكتروني وسنرسل لك كودًا رقميًا لإعادة تعيين كلمة المرور.</p>
+    <div id="auth-error"></div>
+    <label>البريد الإلكتروني</label><input type="email" id="fp-email" autocomplete="email">
+    <button class="btn btn-primary btn-block" id="fp-submit" style="margin-top:16px;">إرسال الكود</button>
+    <p class="center" style="margin-top:14px;"><a style="color:var(--c-primary);font-weight:800;cursor:pointer;" data-nav="/login">العودة إلى تسجيل الدخول</a></p>
+  </div></div>`;
+}
+function mountForgotPassword(){
+  document.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.getAttribute('data-nav')));
+  const btn = document.getElementById('fp-submit');
+  btn.onclick = async ()=>{
+    const email = document.getElementById('fp-email').value.trim();
+    const errBox = document.getElementById('auth-error');
+    errBox.innerHTML='';
+    if(!email){ errBox.innerHTML = `<p class="field-error">أدخل بريدك الإلكتروني.</p>`; return; }
+    btn.disabled = true; btn.textContent = 'جارٍ الإرسال…';
+    try{
+      await sendRecoveryOtp(email);
+      setOtpCooldown(email);
+      // Neutral message regardless of whether the email is actually registered — never confirm
+      // or deny account existence here (anti-enumeration), matching Supabase's own behavior.
+      toast('إذا كان بريدك الإلكتروني مسجلًا لدينا، سنرسل كودًا رقميًا لإعادة تعيين كلمة المرور.','success');
+      startOtpFlow(email, 'password_reset');
+    }catch(e){
+      errBox.innerHTML = `<p class="field-error">${friendlyError(e)}</p>`;
+    }finally{
+      btn.disabled = false; btn.textContent = 'إرسال الكود';
+    }
+  };
+}
+
 function wirePasswordToggle(inputId, btnId){
   const input = document.getElementById(inputId);
   const btn = document.getElementById(btnId);
@@ -820,6 +894,8 @@ function mountAuthForm(mode){
   document.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.getAttribute('data-nav')));
   wirePasswordToggle('f-password','f-password-toggle');
   mountOAuthButtons();
+  const forgotLink = document.getElementById('f-forgot-link');
+  if(forgotLink) forgotLink.onclick = ()=>navigate('/forgot-password');
   const confirmInput = document.getElementById('f-password-confirm');
   const matchMsg = document.getElementById('pw-match-msg');
   if(mode==='register' && confirmInput){
@@ -905,9 +981,14 @@ function mountAuthForm(mode){
 ========================================================= */
 function viewVerifyOtp(){
   const email = S.otp ? S.otp.email : '';
+  const purpose = S.otp ? S.otp.purpose : 'register';
+  const isReset = purpose === 'password_reset';
+  const introHtml = isReset
+    ? `<p>أرسلنا كودًا رقميًا مكوّنًا من ${OTP_LENGTH} أرقام إلى بريدك الإلكتروني لإعادة تعيين كلمة المرور:<br><strong style="color:var(--c-text);">${email}</strong></p>`
+    : `<p>تم إنشاء حسابك بنجاح.<br>أرسلنا كود تأكيد مكوّنًا من ${OTP_LENGTH} أرقام إلى بريدك الإلكتروني:<br><strong style="color:var(--c-text);">${email}</strong></p>`;
   return `<div class="auth-shell"><div class="auth-card">
-    <div class="auth-mark">🔐</div><div class="eyebrow">خطوة أخيرة</div><h2>تأكيد البريد الإلكتروني</h2>
-    <p>تم إنشاء حسابك بنجاح.<br>أرسلنا كود تأكيد مكوّنًا من ${OTP_LENGTH} أرقام إلى بريدك الإلكتروني:<br><strong style="color:var(--c-text);">${email}</strong></p>
+    <div class="auth-mark">${isReset?'🔑':'🔐'}</div><div class="eyebrow">${isReset?'استعادة كلمة المرور':'خطوة أخيرة'}</div><h2>${isReset?'أدخل كود الاستعادة':'تأكيد البريد الإلكتروني'}</h2>
+    ${introHtml}
     <div id="otp-error"></div>
     <div class="otp-boxes" id="otp-boxes">
       ${Array.from({length:OTP_LENGTH}).map((_,i)=>`<input class="otp-box" id="otp-${i}" inputmode="numeric" pattern="[0-9]*" maxlength="1" autocomplete="${i===0?'one-time-code':'off'}">`).join('')}
@@ -918,13 +999,13 @@ function viewVerifyOtp(){
     </div>
     <div class="auth-note">
       كتبت بريدًا خاطئًا؟
-      <a id="otp-change-email" style="color:var(--c-primary); font-weight:800; cursor:pointer;">عدّل البريد الإلكتروني وعد للتسجيل</a>
+      <a id="otp-change-email" style="color:var(--c-primary); font-weight:800; cursor:pointer;">${isReset?'عدّل البريد الإلكتروني':'عدّل البريد الإلكتروني وعد للتسجيل'}</a>
     </div>
   </div></div>`;
 }
 
 function mountVerifyOtp(){
-  if(!S.otp || !S.otp.email){ navigate('/register'); return; }
+  if(!S.otp || !S.otp.email){ navigate('/login'); return; }
   const email = S.otp.email;
   const purpose = S.otp.purpose;
   const boxes = Array.from({length:OTP_LENGTH}, (_,i)=>document.getElementById('otp-'+i));
@@ -962,14 +1043,25 @@ function mountVerifyOtp(){
     if(code.length!==OTP_LENGTH){ errBox.innerHTML = `<p class="field-error">أدخل الكود المكوّن من ${OTP_LENGTH} أرقام كاملًا.</p>`; markInvalid(); return; }
     confirmBtn.disabled = true; confirmBtn.textContent='جارٍ التحقق…';
     try{
-      const data = await verifyEmailOtp(email, code);
+      // Same verification screen, different underlying Supabase OTP type per purpose: signup/login
+      // confirmation uses type:'email', password recovery uses type:'recovery' (see the two
+      // functions' comments above for why they can't be merged into one call).
+      const data = purpose==='password_reset' ? await verifyRecoveryOtp(email, code) : await verifyEmailOtp(email, code);
       if(!data.session){ throw new Error('لم يتم إنشاء الجلسة، حاول مرة أخرى.'); }
       clearOtpCooldown(email);
       S.otp = null;
-      await bootAfterAuth(data.session);
-      toast('تم تأكيد بريدك الإلكتروني بنجاح.','success');
-      // Continue into the app's existing post-auth flow (dashboard nudges profile completion).
-      navigate('/dashboard');
+      if(purpose==='password_reset'){
+        // Do NOT bootAfterAuth/dashboard here: this session exists only to authorize the next
+        // updateUser({password}) call. The reset-password screen itself gates on S.recovery.
+        S.recovery = { email };
+        toast('تم التحقق من الكود. يمكنك الآن تعيين كلمة مرور جديدة.','success');
+        navigate('/reset-password');
+      } else {
+        await bootAfterAuth(data.session);
+        toast('تم تأكيد بريدك الإلكتروني بنجاح.','success');
+        // Continue into the app's existing post-auth flow (dashboard nudges profile completion).
+        navigate('/dashboard');
+      }
     }catch(e){
       errBox.innerHTML = `<p class="field-error">${friendlyError(e)}</p>`;
       markInvalid();
@@ -1000,7 +1092,9 @@ function mountVerifyOtp(){
   async function doResend(){
     resendEl.classList.add('disabled');
     try{
-      await resendSignupOtp(email);
+      // resend() has no 'recovery' type — a recovery code must be re-requested via
+      // resetPasswordForEmail() again (resendRecoveryOtp wraps that). See its definition above.
+      if(purpose==='password_reset') await resendRecoveryOtp(email); else await resendSignupOtp(email);
       setOtpCooldown(email);
       toast('تم إرسال كود جديد إلى بريدك الإلكتروني.','success');
       boxes.forEach(b=>{ b.value=''; b.classList.remove('otp-err'); });
@@ -1019,7 +1113,64 @@ function mountVerifyOtp(){
   document.getElementById('otp-change-email').onclick = ()=>{
     if(timer){ clearInterval(timer); timer=null; }
     S.otp = null;
-    navigate('/register');
+    navigate(purpose==='password_reset' ? '/forgot-password' : '/register');
+  };
+}
+
+/* =========================================================
+   PUBLIC — Reset password (step 3: set a new password after a verified recovery OTP)
+========================================================= */
+function viewResetPassword(){
+  return `<div class="auth-shell"><div class="auth-card">
+    <div class="auth-mark">🔑</div><div class="eyebrow">الخطوة الأخيرة</div><h2>كلمة مرور جديدة</h2>
+    <p>تم التحقق من هويتك. أدخل كلمة مرور جديدة لحسابك.</p>
+    <div id="auth-error"></div>
+    <label>كلمة المرور الجديدة</label>
+    <div class="pw-field"><input type="password" id="rp-password" autocomplete="new-password"><button type="button" class="pw-toggle" id="rp-password-toggle" aria-label="إظهار كلمة المرور">👁️</button></div>
+    <p class="hint">6 أحرف على الأقل.</p>
+    <label>تأكيد كلمة المرور</label>
+    <div class="pw-field"><input type="password" id="rp-password-confirm" autocomplete="new-password"><button type="button" class="pw-toggle" id="rp-password-confirm-toggle" aria-label="إظهار كلمة المرور">👁️</button></div>
+    <p class="pw-match-msg" id="rp-match-msg"></p>
+    <button class="btn btn-primary btn-block" id="rp-submit" style="margin-top:6px;">تغيير كلمة المرور</button>
+  </div></div>`;
+}
+function mountResetPassword(){
+  if(!S.recovery || !S.recovery.email){ navigate('/forgot-password'); return; }
+  wirePasswordToggle('rp-password','rp-password-toggle');
+  wirePasswordToggle('rp-password-confirm','rp-password-confirm-toggle');
+  const pw = document.getElementById('rp-password');
+  const confirmInput = document.getElementById('rp-password-confirm');
+  const matchMsg = document.getElementById('rp-match-msg');
+  const checkMatch = ()=>{
+    if(!confirmInput.value){ matchMsg.textContent=''; matchMsg.className='pw-match-msg'; return; }
+    const ok = pw.value === confirmInput.value;
+    matchMsg.textContent = ok ? 'كلمتا المرور متطابقتان.' : 'كلمتا المرور غير متطابقتين.';
+    matchMsg.className = 'pw-match-msg ' + (ok?'ok':'bad');
+  };
+  pw.addEventListener('input', checkMatch);
+  confirmInput.addEventListener('input', checkMatch);
+
+  const btn = document.getElementById('rp-submit');
+  btn.onclick = async ()=>{
+    const errBox = document.getElementById('auth-error');
+    errBox.innerHTML='';
+    if(!pw.value || pw.value.length<6){ errBox.innerHTML = `<p class="field-error">كلمة المرور يجب أن تكون 6 أحرف على الأقل.</p>`; return; }
+    if(pw.value !== confirmInput.value){ errBox.innerHTML = `<p class="field-error">كلمتا المرور غير متطابقتين.</p>`; return; }
+    if(!S.recovery || !S.recovery.email){ navigate('/forgot-password'); return; }
+    btn.disabled = true; btn.textContent = 'جارٍ التحديث…';
+    try{
+      await updatePassword(pw.value);
+      S.recovery = null;
+      // Force a clean, fresh login with the new password rather than continuing on the
+      // short-lived recovery session, per the requested flow (back to /login, not /dashboard).
+      await sb.auth.signOut();
+      toast('تم تغيير كلمة المرور بنجاح. سجّل الدخول بكلمة المرور الجديدة.','success');
+      navigate('/login');
+    }catch(e){
+      errBox.innerHTML = `<p class="field-error">${friendlyError(e)}</p>`;
+    }finally{
+      btn.disabled = false; btn.textContent = 'تغيير كلمة المرور';
+    }
   };
 }
 
