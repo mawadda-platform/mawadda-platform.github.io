@@ -1836,6 +1836,11 @@ function renderBasicForm(panel, p){
       <div><label>المحافظة</label><select id="pf-governorate_id"><option value="">اختر</option></select></div>
       <div><label>المدينة/المركز</label><select id="pf-city_id"><option value="">اختر المحافظة أولًا</option></select></div>
     </div>
+    <div id="pf-village_area-wrap" style="display:none;">
+      <label>المنطقة / القرية / النجع <span style="color:var(--c-danger);">*</span></label>
+      <input type="text" id="pf-village_area" maxlength="150" placeholder="اكتب اسم المنطقة أو القرية أو النجع" value="${p.village_area||''}">
+      <div class="hint">إجباري بعد اختيار المركز — يكتبه المستخدم بنفسه.</div>
+    </div>
     <label>نبذة شخصية</label><textarea id="pf-bio">${p.bio||''}</textarea>
     <button class="btn btn-primary btn-block" id="pf-save" style="margin-top:16px;">حفظ البيانات الأساسية</button>
   `;
@@ -1854,22 +1859,37 @@ function renderBasicForm(panel, p){
   // geo
   const govSel = document.getElementById('pf-governorate_id');
   const citySel = document.getElementById('pf-city_id');
+  const villageWrap = document.getElementById('pf-village_area-wrap');
+  const villageInput = document.getElementById('pf-village_area');
+  function syncVillageVisibility(){
+    if(citySel.value){ villageWrap.style.display='block'; }
+    else{ villageWrap.style.display='none'; villageInput.value=''; }
+  }
   async function fillGov(){
     await ensureGeo();
     govSel.innerHTML = `<option value="">اختر</option>` + S.governorates.map(g=>`<option value="${g.id}" ${p.governorate_id==g.id?'selected':''}>${g.name_ar}</option>`).join('');
-    fillCities(p.governorate_id);
+    await fillCities(p.governorate_id);
+    syncVillageVisibility();
   }
   async function fillCities(govId){
-    if(!govId){ citySel.innerHTML = `<option value="">اختر المحافظة أولًا</option>`; return; }
+    if(!govId){ citySel.innerHTML = `<option value="">اختر المحافظة أولًا</option>`; syncVillageVisibility(); return; }
     const {data} = await sb.from('geo_cities').select('*').eq('governorate_id', govId).eq('is_active',true).order('sort_order');
-    if(!data || !data.length){ citySel.innerHTML = `<option value="">لا توجد مدن متاحة حاليًا لهذه المحافظة</option>`; return; }
+    if(!data || !data.length){ citySel.innerHTML = `<option value="">لا توجد مدن متاحة حاليًا لهذه المحافظة</option>`; syncVillageVisibility(); return; }
     citySel.innerHTML = `<option value="">اختر</option>` + data.map(c=>`<option value="${c.id}" ${p.city_id==c.id?'selected':''}>${c.name_ar}</option>`).join('');
+    syncVillageVisibility();
   }
   fillGov();
   govSel.onchange = (e)=>fillCities(e.target.value);
+  citySel.onchange = syncVillageVisibility;
 
   document.getElementById('pf-save').onclick = async ()=>{
-    const btn = document.getElementById('pf-save'); btn.disabled=true; btn.textContent='جارٍ الحفظ…';
+    const btn = document.getElementById('pf-save');
+    if(citySel.value && !val('pf-village_area')){
+      toast('المنطقة / القرية / النجع إجباري بعد اختيار المركز','error');
+      villageInput.focus();
+      return;
+    }
+    btn.disabled=true; btn.textContent='جارٍ الحفظ…';
     try{
       const payload = {
         user_id: S.session.user.id,
@@ -1882,6 +1902,7 @@ function renderBasicForm(panel, p){
         health_status: val('pf-health_status'), disability_type: val('pf-disability_type'),
         disability_other_details: val('pf-disability_other_details')||null,
         governorate_id: numOrNull('pf-governorate_id'), city_id: numOrNull('pf-city_id'),
+        village_area: citySel.value ? val('pf-village_area') : null,
         bio: val('pf-bio')||null
       };
       const beardEl = document.getElementById('pf-beard'); if(beardEl) payload.beard = beardEl.value||null;
