@@ -344,6 +344,30 @@ textarea{min-height:110px;}
 .admin-group{padding:14px;border:1px solid var(--c-border);border-radius:15px;background:var(--c-surface);}
 .admin-group h4{font-size:13px;color:var(--c-primary);}
 .coming-soon{border-style:dashed!important;}
+
+/* Trust / privacy strip (homepage) */
+.trust-strip{display:grid;gap:10px;margin-top:26px;}
+.trust-item{display:flex;align-items:flex-start;gap:12px;padding:16px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:16px;}
+.trust-item .trust-icon{flex-shrink:0;width:40px;height:40px;border-radius:12px;background:var(--c-accent-light);color:var(--c-primary-dark);display:grid;place-items:center;font-size:18px;}
+html[data-theme="dark"] .trust-item .trust-icon{color:var(--c-primary);}
+.trust-item h4{font-size:14.5px;margin-bottom:3px;}
+.trust-item p{margin:0;font-size:13.5px;}
+
+/* Homepage public candidate preview */
+.home-preview-foot{display:flex;justify-content:center;margin-top:18px;}
+
+/* Success stories */
+.story-grid{display:grid;gap:16px;}
+@media(min-width:700px){ .story-grid{grid-template-columns:repeat(3,1fr);} }
+.story-card{background:var(--c-surface);border:1px solid var(--c-border);border-radius:18px;padding:20px;box-shadow:var(--shadow);}
+.story-card .story-avatars{display:flex;gap:6px;margin-bottom:12px;}
+.story-card .story-avatar{width:46px;height:46px;border-radius:14px;background:var(--c-accent-light);color:var(--c-primary-dark);display:grid;place-items:center;font-size:19px;}
+html[data-theme="dark"] .story-card .story-avatar{color:var(--c-primary);}
+.story-card .story-meta{font-size:12.5px;color:var(--c-text-muted);font-weight:700;margin-bottom:8px;}
+.story-card blockquote{margin:0;font-size:14.5px;line-height:1.85;color:var(--c-text);}
+.story-empty{grid-column:1/-1;text-align:center;padding:38px 22px;border:1.5px dashed var(--c-border);border-radius:18px;background:var(--c-surface);}
+.story-empty .icon{font-size:34px;margin-bottom:8px;}
+.story-empty p{max-width:460px;margin:6px auto 0;}
 @media(min-width:700px){
   .hero-grid{grid-template-columns:1.45fr .75fr;}
   .feature-grid{grid-template-columns:repeat(3,1fr);}
@@ -730,7 +754,10 @@ async function render(){
   const routeKey = parts[0] || 'landing';
   try{
     switch(routeKey){
-      case '': case 'landing': app.innerHTML = loggedIn ? loadingBox() : viewLanding(); if(loggedIn) navigate('/dashboard'); break;
+      case '': case 'landing':
+        if(loggedIn){ app.innerHTML = loadingBox(); navigate('/dashboard'); }
+        else { app.innerHTML = viewLanding(); mountLandingExtras(); }
+        break;
       case 'login': app.innerHTML = viewLogin(); mountAuthForm('login'); break;
       case 'register': app.innerHTML = viewRegister(); mountAuthForm('register'); break;
       case 'verify-otp':
@@ -874,6 +901,13 @@ function viewLanding(){
       </div>
       <div class="hero-panel"><div class="panel-mark">💍</div><h3>تصفح قبل التسجيل</h3><p>يمكن للزائر استعراض الملفات العامة التي يسمح بها النظام. أما طلبات الزواج وتعديل الملف والبيانات الخاصة فتتطلب تسجيل الدخول.</p><button class="btn btn-primary btn-block" data-nav="/discovery">استكشاف الملفات العامة</button></div>
     </div></section>
+    <section class="container" style="padding-top:0;padding-bottom:0;">
+      <div class="trust-strip">
+        <div class="trust-item"><div class="trust-icon">🔒</div><div><h4>لا تواصل مباشر بين الأعضاء</h4><p>كل طلب زواج يمر أولًا عبر مراجعة إدارية قبل وصوله للطرف الآخر.</p></div></div>
+        <div class="trust-item"><div class="trust-icon">🙈</div><div><h4>لا تُعرض بيانات حساسة للزوار</h4><p>الهاتف والبريد الإلكتروني وأي بيانات خاصة لا تظهر في التصفح العام أبدًا.</p></div></div>
+        <div class="trust-item"><div class="trust-icon">🛡️</div><div><h4>صلاحيات على مستوى قاعدة البيانات</h4><p>الوصول للبيانات الحساسة والإدارة مقيّد بصلاحيات حقيقية، لا بإعدادات واجهة فقط.</p></div></div>
+      </div>
+    </section>
     <section class="container">
       <div class="page-heading"><div><div class="eyebrow">كيف تعمل مودة؟</div><h2>رحلة واضحة من التصفح إلى الطلب</h2></div></div>
       <div class="steps-redesign">
@@ -888,10 +922,50 @@ function viewLanding(){
         <div class="feature-block"><h4>وضوح الإجراءات</h4><p>كل إجراء له مكان واضح وحالة مفهومة بدل ازدحام الأزرار والصفحات.</p></div>
         <div class="feature-block"><h4>واجهة هادئة</h4><p>تصميم عربي RTL حديث يعمل على الهاتف والكمبيوتر مع الوضع الداكن.</p></div>
       </div>
+      <div class="section-title"><div><div class="eyebrow">تصفح مباشر</div><h3 class="mt0">استكشف بعض الملفات العامة</h3></div><a style="color:var(--c-primary);font-weight:800;cursor:pointer;font-size:14px;" data-nav="/discovery">عرض الكل ←</a></div>
+      <div id="home-candidates">${loadingBox('جارِ تحميل الملفات العامة…')}</div>
+      <div class="section-title"><div><div class="eyebrow">من مودة إلى بيت وأسرة</div><h3 class="mt0">قصص بدأت من مودة</h3></div></div>
+      <div id="home-stories">${loadingBox('جارِ التحميل…')}</div>
       <div class="cta-band"><div><h3 style="color:#fff;margin-bottom:3px;">ابدأ من المكان المناسب لك</h3><p>تصفح أولًا أو أنشئ حسابك للانتقال إلى الوظائف الخاصة.</p></div><div class="hero-actions"><button class="btn btn-primary" style="background:#fff;color:var(--c-primary)" data-nav="/register">إنشاء حساب</button><button class="btn btn-outline" data-nav="/discovery">تصفح المرشحين</button></div></div>
     </section>
     ${siteFooter()}
   </main>`;
+}
+/* Fills the two async homepage sections (public candidate preview + success stories) after
+   viewLanding()'s HTML is already in the DOM. Never uses mock data: candidates come from the
+   real public RPC, and stories show an honest empty state unless a real, approved table exists. */
+async function mountLandingExtras(){
+  // Rewire every data-nav button/link that just got inserted via viewLanding()'s HTML
+  // (hero buttons, CTA band, footer links). renderHeader() only bound data-nav elements
+  // that existed in the DOM *before* this page's HTML was injected, so without this call
+  // none of the landing-page buttons would respond to clicks.
+  document.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.getAttribute('data-nav')));
+  const candBox = document.getElementById('home-candidates');
+  if(candBox){
+    try{
+      const res = await api.getPublicCandidateProfiles({p_limit:3, p_offset:0});
+      if(!res || !res.items || !res.items.length){
+        candBox.innerHTML = emptyBox('🔍','لا توجد ملفات عامة متاحة حاليًا','عد لاحقًا أو تصفح كل الملفات من صفحة الاستكشاف.');
+      } else {
+        candBox.innerHTML = `<div class="grid grid-3">${res.items.map(candCard).join('')}</div>`;
+        candBox.querySelectorAll('[data-cand]').forEach(el=>el.onclick=()=>navigate('/candidate/'+el.dataset.cand));
+      }
+    }catch(e){
+      // Never surface a raw error box on the public homepage — fail quiet into a neutral prompt instead.
+      candBox.innerHTML = `<div class="state-box"><p class="mb0">تصفح الملفات العامة من صفحة الاستكشاف.</p></div>`;
+    }
+  }
+  const storyBox = document.getElementById('home-stories');
+  if(storyBox){
+    // No success_stories table/RPC exists yet in this project. Showing an honest, respectful
+    // empty state rather than inventing testimonials — replace this block once a real,
+    // consent-backed data source is wired up (see the build report for details).
+    storyBox.innerHTML = `<div class="story-grid"><div class="story-empty">
+      <div class="icon">🤍</div>
+      <h4 class="mt0">سنشارك هنا قصصًا حقيقية</h4>
+      <p>سنشارك هنا قصصًا حقيقية من أسر بدأت رحلتها عبر مودة، بعد موافقة أصحابها.</p>
+    </div></div>`;
+  }
 }
 function siteFooter(){
   return `<footer class="site-footer"><div class="wrap footer-grid">
