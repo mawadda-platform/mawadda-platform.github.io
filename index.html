@@ -352,6 +352,11 @@ textarea{min-height:110px;}
 .cand-card:hover{border-color:var(--c-accent);transform:translateY(-1px);}
 .cand-avatar{width:58px;height:58px;border-radius:17px;background:var(--c-surface-2);display:grid;place-items:center;font-size:26px;color:var(--c-primary);}
 .cand-top{gap:10px;}
+/* Real/near-photographic avatar photos (profile, discovery cards, candidate details).
+   Circular so they read well as a "Profile Avatar" bubble; safe icon fallback if no image yet. */
+.avatar-photo{border-radius:50%;overflow:hidden;background:var(--c-surface-2);display:grid;place-items:center;color:var(--c-text-muted);flex-shrink:0;}
+.avatar-photo img{width:100%;height:100%;object-fit:cover;display:block;}
+.avatar-photo--fallback::after{content:'👤';}
 .cand-summary{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;margin-bottom:12px;}
 .profile-section{padding:20px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:18px;margin-top:12px;}
 .profile-section h3{font-size:16px;color:var(--c-primary);}
@@ -607,25 +612,44 @@ const LABELS = {
 function L(group,val){ if(val===null||val===undefined) return '—'; return (LABELS[group]&&LABELS[group][val])||val; }
 function opts(group){ return Object.entries(LABELS[group]).map(([v,t])=>`<option value="${v}">${t}</option>`).join(''); }
 
-// Ready-made cartoon avatars — matches the existing DB enum public.avatar_type exactly
-// (male_no_beard, male_light_beard, male_full_beard, male_style_alt,
-//  female_style_1..4). No upload, no Storage — purely a fixed emoji per stored avatar_id.
+// Professional photorealistic avatars — matches the existing DB enum public.avatar_type,
+// extended from 8 to 12 values (6 male + 6 female; the original 4+4 keys/mapping are kept
+// unchanged so existing users' saved avatar_id values keep working exactly as before).
+// No upload, no Supabase Storage — the DB only ever stores the fixed avatar_id string; the
+// image is resolved from a fixed local path per id. If an image file isn't present yet, a
+// safe neutral fallback (a person icon, never a cartoon) is shown so the UI never breaks.
 const AVATARS = {
-  male_no_beard:{emoji:'🧑',label:'رجل بدون لحية'},
-  male_light_beard:{emoji:'🧔🏻',label:'رجل بلحية خفيفة'},
-  male_full_beard:{emoji:'🧔',label:'رجل بلحية كاملة'},
-  male_style_alt:{emoji:'👨‍🦱',label:'رجل — مظهر مختلف'},
-  female_style_1:{emoji:'🧕',label:'امرأة — الطراز 1'},
-  female_style_2:{emoji:'👩🏻‍🦱',label:'امرأة — الطراز 2'},
-  female_style_3:{emoji:'👩🏻‍🦰',label:'امرأة — الطراز 3'},
-  female_style_4:{emoji:'👩🏻',label:'امرأة — الطراز 4'}
+  male_no_beard:      {img:'avatars/men/male_no_beard.png',       label:'بدون لحية',    gender:'male'},
+  male_light_beard:   {img:'avatars/men/male_light_beard.png',    label:'لحية خفيفة',   gender:'male'},
+  male_full_beard:    {img:'avatars/men/male_full_beard.png',     label:'لحية كاملة',   gender:'male'},
+  male_style_alt:     {img:'avatars/men/male_style_alt.png',      label:'مظهر أنيق',    gender:'male'},
+  male_jalabiya:       {img:'avatars/men/male_jalabiya.png',       label:'جلباب',        gender:'male'},
+  male_beard_jalabiya: {img:'avatars/men/male_beard_jalabiya.png', label:'لحية وجلباب',  gender:'male'},
+  female_style_1:     {img:'avatars/women/female_style_1.png',    label:'محجبة',        gender:'female'},
+  female_style_2:     {img:'avatars/women/female_style_2.png',    label:'حجاب أنيق',    gender:'female'},
+  female_style_3:     {img:'avatars/women/female_style_3.png',    label:'حجاب طويل',    gender:'female'},
+  female_style_4:     {img:'avatars/women/female_style_4.png',    label:'عباءة محتشمة', gender:'female'},
+  female_niqab:        {img:'avatars/women/female_niqab.png',      label:'منتقبة',       gender:'female'},
+  female_khimar:       {img:'avatars/women/female_khimar.png',     label:'خمار',         gender:'female'}
 };
-function avatarEmoji(avatarId){ return (AVATARS[avatarId]&&AVATARS[avatarId].emoji) || '👤'; }
 function avatarsForGender(gender){
-  const keys = gender==='female' ? ['female_style_1','female_style_2','female_style_3','female_style_4']
-             : gender==='male' ? ['male_no_beard','male_light_beard','male_full_beard','male_style_alt']
-             : Object.keys(AVATARS);
-  return keys;
+  const keys = Object.keys(AVATARS).filter(k=>AVATARS[k].gender===gender);
+  // Unknown/missing gender: never break the page — fall back to showing everything.
+  return keys.length ? keys : Object.keys(AVATARS);
+}
+// Renders one circular avatar photo (size in px). Falls back to a plain person icon —
+// never a cartoon — if the image file is missing or fails to load, so a bare `avatars/...`
+// folder with no files yet never breaks any page.
+function avatarPhotoHtml(avatarId, size, extraClass){
+  const a = AVATARS[avatarId];
+  const s = size || 58;
+  const cls = 'avatar-photo' + (extraClass ? (' ' + extraClass) : '');
+  if(!a){
+    return `<div class="${cls} avatar-photo--fallback" style="width:${s}px;height:${s}px;font-size:${Math.round(s*0.45)}px;"></div>`;
+  }
+  return `<div class="${cls}" style="width:${s}px;height:${s}px;font-size:${Math.round(s*0.45)}px;">
+    <img src="${a.img}" alt="${a.label}" loading="lazy" onerror="this.parentElement.classList.add('avatar-photo--fallback'); this.remove();">
+  </div>`;
 }
 
 /* =========================================================
@@ -1850,7 +1874,7 @@ function renderAccountForm(panel, p){
       <input type="text" id="ac-village_area" maxlength="150" value="${p.village_area||''}">
     </div>
     <label>الصورة الرمزية (Avatar)</label>
-    <div class="hint" style="margin-bottom:8px;">اختر صورة كارتونية جاهزة تعبر عنك — لا يوجد رفع صور شخصية حقيقية.</div>
+    <div class="hint" style="margin-bottom:8px;">اختر صورة تعبيرية احترافية من المجموعة الجاهزة — لا يوجد رفع صور شخصية حقيقية.</div>
     <div id="ac-avatar-grid" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px;"></div>
     <button class="btn btn-primary btn-block" id="ac-save" style="margin-top:16px;">حفظ الملف الشخصي</button>
   `;
@@ -1858,11 +1882,17 @@ function renderAccountForm(panel, p){
   function renderAvatarGrid(){
     const grid = document.getElementById('ac-avatar-grid');
     const keys = avatarsForGender(p.gender);
-    grid.innerHTML = keys.map(k=>`
-      <div class="ac-avatar-opt" data-avatar="${k}" style="cursor:pointer;text-align:center;padding:8px;border-radius:14px;border:2px solid ${selectedAvatar===k?'var(--c-primary)':'var(--c-border)'};background:${selectedAvatar===k?'var(--c-accent-light)':'transparent'};width:78px;">
-        <div style="font-size:30px;">${AVATARS[k].emoji}</div>
-        <div style="font-size:10.5px;margin-top:4px;">${AVATARS[k].label}</div>
-      </div>`).join('');
+    grid.innerHTML = keys.map(k=>{
+      const a = AVATARS[k];
+      const on = selectedAvatar===k;
+      return `
+      <div class="ac-avatar-opt" data-avatar="${k}" style="cursor:pointer;text-align:center;padding:6px;border-radius:14px;border:2px solid ${on?'var(--c-primary)':'var(--c-border)'};background:${on?'var(--c-accent-light)':'transparent'};width:84px;">
+        <div class="avatar-photo" style="width:70px;height:70px;border-radius:12px;margin:0 auto;font-size:26px;">
+          <img src="${a.img}" alt="${a.label}" loading="lazy" onerror="this.parentElement.classList.add('avatar-photo--fallback'); this.remove();">
+        </div>
+        <div style="font-size:10.5px;margin-top:4px;">${a.label}</div>
+      </div>`;
+    }).join('');
     grid.querySelectorAll('.ac-avatar-opt').forEach(el=>{
       el.onclick = ()=>{ selectedAvatar = el.dataset.avatar; renderAvatarGrid(); };
     });
@@ -2376,7 +2406,7 @@ function candCard(c){
   const gov = c.governorate ? c.governorate.name_ar : 'غير محدد';
   const traits = (c.personality_traits||[]).slice(0,3).map(t=>`<span class="chip">${L('personality_trait',t)}</span>`).join('');
   return `<div class="cand-card" data-cand="${c.candidate_id}">
-    <div class="cand-top"><span style="font-size:30px;">${avatarEmoji(c.avatar_id)}</span><span class="cand-age">${c.age??'—'} سنة</span><span class="badge badge-muted">${L('gender',c.gender)}</span></div>
+    <div class="cand-top">${avatarPhotoHtml(c.avatar_id,44)}<span class="cand-age">${c.age??'—'} سنة</span><span class="badge badge-muted">${L('gender',c.gender)}</span></div>
     <p class="mb0">📍 ${gov}</p>
     <p class="mb0">🎓 ${L('education_level',c.education_level)}</p>
     <p class="mb0">💍 ${L('marital_status',c.marital_status)}</p>
@@ -2408,7 +2438,7 @@ async function mountCandidate(app, id){
     const traits=(c.personality_traits||[]).map(t=>`<span class="chip">${L('personality_trait',t)}</span>`).join('')||'<span class="muted">لا يوجد</span>';
     app.innerHTML=`<div class="container narrow">
       <button class="btn btn-ghost btn-sm" data-back>→ رجوع للاستكشاف</button>
-      <div class="profile-section" style="margin-top:12px;"><div class="cand-summary"><div class="cand-avatar">${avatarEmoji(c.avatar_id)}</div><div><div class="eyebrow">ملف مرشح</div><h2>${c.age??'—'} سنة</h2><span class="badge badge-muted">${L('gender',c.gender)}</span></div></div>
+      <div class="profile-section" style="margin-top:12px;"><div class="cand-summary">${avatarPhotoHtml(c.avatar_id,58,'cand-avatar')}<div><div class="eyebrow">ملف مرشح</div><h2>${c.age??'—'} سنة</h2><span class="badge badge-muted">${L('gender',c.gender)}</span></div></div>
       <div class="profile-section"><h3>البيانات الأساسية</h3><p><strong>الحالة الاجتماعية:</strong> ${L('marital_status',c.marital_status)}</p><p><strong>المحافظة:</strong> ${gov}</p><p><strong>المؤهل الدراسي:</strong> ${L('education_level',c.education_level)}</p></div>
       <div class="profile-section"><h3>التعليم والعمل</h3><p><strong>استقرار العمل:</strong> ${L('work_stability',c.work_stability)}</p></div>
       <div class="profile-section"><h3>السكن ونمط الحياة</h3><p><strong>الحالة السكنية:</strong> ${L('housing_status',c.housing_status)}</p><p><strong>الاستعداد للانتقال:</strong> ${L('relocation_willingness',c.relocation_willingness)}</p></div>
