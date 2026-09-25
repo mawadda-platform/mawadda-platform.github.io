@@ -4,6 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>مودة | منصة الزواج الجاد</title>
+<script>
+/* Runs before first paint: sets the theme with no flash, honoring a saved choice
+   first and the OS-level prefers-color-scheme otherwise. */
+(function(){
+  try{
+    var saved = localStorage.getItem('mawadda-theme');
+    var t = (saved==='dark'||saved==='light') ? saved
+      : ((window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light');
+    document.documentElement.dataset.theme = t;
+  }catch(e){ document.documentElement.dataset.theme = 'light'; }
+})();
+</script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💍</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -347,6 +359,45 @@ textarea{min-height:110px;}
   .otp-boxes{gap:5px;}
 }
 
+/* =========================================================
+   ACCESSIBILITY + THEME TOGGLE — audit follow-up pass
+========================================================= */
+/* Respect the OS reduced-motion setting everywhere */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms !important; animation-iteration-count:1 !important;
+    transition-duration:.001ms !important; scroll-behavior:auto !important;
+  }
+}
+/* Visible keyboard focus ring on every interactive element, incl. the clickable
+   data-nav / data-cand elements that were not keyboard-reachable before */
+.btn:focus-visible, a:focus-visible, [data-nav]:focus-visible, [data-cand]:focus-visible,
+.theme-pill:focus-visible, .pw-toggle:focus-visible, .chip-select:focus-visible,
+.otp-box:focus-visible, .sidebar-link:focus-visible, .bn-item:focus-visible,
+.nav-link:focus-visible, .action-tile:focus-visible, .cand-card:focus-visible{
+  outline:2.5px solid var(--c-primary); outline-offset:2px; border-radius:8px;
+}
+input:focus,select:focus,textarea:focus{
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--c-primary) 20%, transparent);
+}
+[data-nav],[data-cand]{ cursor:pointer; }
+
+/* Premium pill-style light/dark toggle (replaces the old bare icon button) */
+.theme-pill{
+  position:relative; width:60px; height:32px; border-radius:999px; flex-shrink:0;
+  border:1.5px solid var(--c-border); background:var(--c-surface-2); padding:0; cursor:pointer;
+}
+.theme-pill-track{
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:space-between;
+  padding:0 7px; font-size:12px; pointer-events:none; opacity:.55;
+}
+.theme-pill-knob{
+  position:absolute; top:3px; inset-inline-start:3px; width:24px; height:24px; border-radius:50%;
+  background:var(--c-surface); box-shadow:var(--shadow); display:grid; place-items:center;
+  font-size:12px; transition:inset-inline-start .25s ease, background .25s ease;
+}
+.theme-pill[data-on="dark"] .theme-pill-knob{ inset-inline-start:calc(100% - 27px); background:var(--c-primary-dark); }
+.theme-switch{ gap:10px; }
 </style>
 </head>
 <body>
@@ -492,7 +543,7 @@ function confirmModal(title, msg, confirmLabel, onConfirm, danger){
 }
 function loadingBox(text){ return `<div class="state-box"><div class="spinner"></div><p style="margin-top:12px;">${text||'جارِ التحميل…'}</p></div>`; }
 function emptyBox(icon,title,sub){ return `<div class="state-box"><div class="icon list-empty-illustration">${icon}</div><h3 style="color:var(--c-text);">${title}</h3><p>${sub||''}</p></div>`; }
-function errorBox(msg,retryFnName){ return `<div class="state-box"><div class="icon">⚠️</div><h3 style="color:var(--c-danger);">حدث خطأ</h3><p>${friendlyError(msg)}</p>${retryFnName?`<button class="btn btn-outline" onclick="${retryFnName}">إعادة المحاولة</button>`:''}</div>`; }
+function errorBox(msg,retryFnName){ return `<div class="state-box"><div class="icon">⚠️</div><h3 style="color:var(--c-danger);">حدث خطأ</h3><p>${friendlyError(msg)}</p><button class="btn btn-outline" onclick="${retryFnName||'render()'}">إعادة المحاولة</button></div>`; }
 
 /* =========================================================
    6. API / RPC LAYER
@@ -708,19 +759,26 @@ async function render(){
   }
 }
 
+function themePillHtml(id){
+  return `<button class="theme-pill" id="${id}" type="button" role="switch" aria-label="تبديل المظهر بين الفاتح والداكن">
+    <span class="theme-pill-track"><span>☀️</span><span>🌙</span></span>
+    <span class="theme-pill-knob"></span>
+  </button>`;
+}
 function renderHeader(){
   const loggedIn = !!S.session;
   const nav = document.getElementById('nav-desktop');
   const actions = document.getElementById('header-actions');
   if(!loggedIn){
     nav.innerHTML='';
-    actions.innerHTML = `<button class="btn btn-ghost btn-sm" id="theme-toggle-top" aria-label="تغيير الوضع">◐</button><span class="nav-link" data-nav="/discovery">استكشاف</span><span class="nav-link" data-nav="/login">دخول</span><button class="btn btn-primary btn-sm" data-nav="/register">إنشاء حساب</button>`;
+    actions.innerHTML = `${themePillHtml('theme-toggle-top')}<span class="nav-link" data-nav="/discovery">استكشاف</span><span class="nav-link" data-nav="/login">دخول</span><button class="btn btn-primary btn-sm" data-nav="/register">إنشاء حساب</button>`;
   } else {
-    actions.innerHTML = `<button class="btn btn-ghost btn-sm" id="theme-toggle-top" aria-label="تغيير الوضع">◐</button><span class="badge badge-muted member-code">${S.account?S.account.member_code:''}</span><button class="btn btn-ghost btn-sm" id="btn-logout">خروج</button>`;
+    actions.innerHTML = `${themePillHtml('theme-toggle-top')}<span class="badge badge-muted member-code">${S.account?S.account.member_code:''}</span><button class="btn btn-ghost btn-sm" id="btn-logout">خروج</button>`;
   }
   document.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.getAttribute('data-nav')));
   const lo = document.getElementById('btn-logout'); if(lo) lo.onclick = doSignOut;
   const th = document.getElementById('theme-toggle-top'); if(th) th.onclick = toggleTheme;
+  syncThemePills();
 }
 function renderSidebar(){
   const root=document.getElementById('desktop-sidebar');
@@ -735,21 +793,55 @@ function renderSidebar(){
   root.innerHTML=`<div style="font-weight:900;font-size:19px;color:var(--c-primary);padding:0 10px 14px;">مودة <span style="color:var(--c-accent)">•</span></div>
     ${group('الرئيسي',primary)}<div class="sidebar-divider"></div>${group('حسابي',secondary)}
     ${admin.length?`<div class="sidebar-divider"></div>${group('الإدارة',admin)}`:''}
-    <div class="sidebar-divider"></div><div class="theme-switch" id="theme-toggle-side"><span><span class="theme-icon">◐</span> المظهر</span><span class="muted" id="theme-label"></span></div>`;
+    <div class="sidebar-divider"></div><div class="theme-switch"><span class="muted" id="theme-label"></span>${themePillHtml('theme-toggle-side')}</div>`;
   root.querySelectorAll('[data-nav]').forEach(el=>el.onclick=()=>navigate(el.dataset.nav));
-  const t=document.getElementById('theme-toggle-side'); if(t)t.onclick=toggleTheme; updateThemeLabel();
+  const t=document.getElementById('theme-toggle-side'); if(t)t.onclick=toggleTheme;
+  syncThemePills();
 }
 function toggleTheme(){
   const next=document.documentElement.dataset.theme==='dark'?'light':'dark';
-  document.documentElement.dataset.theme=next; localStorage.setItem('mawadda-theme',next); updateThemeLabel();
+  document.documentElement.dataset.theme=next; localStorage.setItem('mawadda-theme',next); syncThemePills();
 }
-function updateThemeLabel(){
-  const label=document.getElementById('theme-label'); if(label) label.textContent=document.documentElement.dataset.theme==='dark'?'داكن':'فاتح';
+/* Updates every theme-pill on screen (header + sidebar can both be mounted) plus the sidebar text label */
+function syncThemePills(){
+  const dark = document.documentElement.dataset.theme==='dark';
+  document.querySelectorAll('.theme-pill').forEach(p=>{
+    p.dataset.on = dark?'dark':'light';
+    p.setAttribute('aria-checked', dark?'true':'false');
+    const knob = p.querySelector('.theme-pill-knob'); if(knob) knob.textContent = dark?'🌙':'☀️';
+  });
+  const label=document.getElementById('theme-label'); if(label) label.textContent = dark?'داكن':'فاتح';
 }
 function initTheme(){
-  const saved=localStorage.getItem('mawadda-theme');
-  document.documentElement.dataset.theme=saved==='dark'?'dark':'light';
+  // The inline <head> script already set the initial theme before first paint (saved choice, else OS preference).
+  // Here we only add a live listener so an unset (never toggled) theme keeps following OS changes.
+  try{
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change', (e)=>{
+      if(localStorage.getItem('mawadda-theme')) return; // user made an explicit choice — don't override it
+      document.documentElement.dataset.theme = e.matches ? 'dark' : 'light';
+      syncThemePills();
+    });
+  }catch(e){}
+  syncThemePills();
 }
+/* Keyboard accessibility: every data-nav / data-cand element is a plain div/span with a click
+   handler, so make each one focusable and operable with Enter/Space, matching real link/button semantics. */
+function enhanceClickableA11y(root){
+  root.querySelectorAll('[data-nav]:not([data-a11y]), [data-cand]:not([data-a11y])').forEach(el=>{
+    el.setAttribute('data-a11y','1');
+    if(!el.hasAttribute('tabindex')) el.tabIndex = 0;
+    if(el.tagName!=='BUTTON' && el.tagName!=='A' && !el.hasAttribute('role')) el.setAttribute('role','button');
+  });
+}
+document.addEventListener('keydown', (e)=>{
+  if(e.key!=='Enter' && e.key!==' ') return;
+  const el = e.target.closest('[data-nav],[data-cand]');
+  if(!el) return;
+  e.preventDefault();
+  el.click();
+});
+new MutationObserver(()=>enhanceClickableA11y(document.body)).observe(document.body, {childList:true, subtree:true});
 function renderBottomNav(){
   const root = document.getElementById('bottom-nav-root');
   document.body.classList.remove('has-bottomnav');
