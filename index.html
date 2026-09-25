@@ -532,6 +532,12 @@ function friendlyError(err){
   if(code==='email_not_confirmed' || /Email not confirmed|email.*not.*confirmed/i.test(m)) return 'البريد الإلكتروني غير مؤكد. أرسلنا لك كود تأكيد.';
   if(code==='invalid_credentials' || /Invalid login credentials/i.test(m)) return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
   if(code==='user_already_exists' || /already registered|user already registered/i.test(m)) return 'هذا البريد الإلكتروني مسجل بالفعل.';
+  if(/الاسم الكامل مطلوب/.test(m)) return 'الاسم الكامل مطلوب لإنشاء الحساب.';
+  if(/الاسم الكامل يجب أن يكون بين/.test(m)) return 'الاسم الكامل يجب أن يكون بين 2 و150 حرفًا.';
+  if(/رقم الهاتف مطلوب/.test(m)) return 'رقم الهاتف مطلوب لإنشاء الحساب.';
+  if(/رقم الهاتف غير صحيح/.test(m)) return 'رقم الهاتف غير صحيح — يجب أن يكون رقم موبايل مصري صالح.';
+  if(/رقم الهاتف مستخدم بالفعل/.test(m)) return 'رقم الهاتف مستخدم بالفعل لحساب آخر على المنصة.';
+  if(/Database error saving new user/i.test(m)) return 'تعذر إنشاء الحساب. تأكد من إدخال الاسم الكامل ورقم هاتف مصري صحيح.';
   if(/Password should be at least|password.*(short|characters|length)|weak password/i.test(m)) return 'كلمة المرور قصيرة أو ضعيفة. استخدم كلمة مرور من 6 أحرف على الأقل.';
   if(code==='otp_expired' || /Token has expired or is invalid/i.test(m)) return 'الكود غير صحيح أو منتهي الصلاحية. اطلب كودًا جديدًا وحاول مجددًا.';
   if(code==='over_email_send_rate_limit' || /security purposes|only request this after|rate limit/i.test(m)) return 'لقد طلبت الكود عدة مرات. الرجاء الانتظار قليلًا قبل إعادة المحاولة.';
@@ -539,6 +545,9 @@ function friendlyError(err){
   if(/permission denied for function/i.test(m)) return 'تعذر الوصول إلى هذه الوظيفة بسبب صلاحيات قاعدة البيانات. لم يتم تجاوز الحماية.';
   if(/Complete your profile before searching/i.test(m)) return 'أكمل ملفك الشخصي أولًا لتتمكن من استخدام البحث الكامل. يمكنك تصفح الملفات العامة في هذه الأثناء.';
   if(/Account not eligible to search/i.test(m)) return 'حسابك غير مؤهل لاستخدام البحث حاليًا (الحساب موقوف أو غير نشط).';
+  if(/Complete your profile before viewing profiles/i.test(m)) return 'أكمل ملفك الشخصي أولًا لتتمكن من عرض ملفات الأعضاء الآخرين.';
+  if(/Account not eligible to view profiles/i.test(m)) return 'حسابك غير مؤهل لعرض الملفات حاليًا (الحساب موقوف أو غير نشط).';
+  if(code==='invalid_candidate_id' || /Missing or invalid candidate ID/i.test(m)) return 'رابط الملف غير صحيح أو غير متاح.';
   if(/chk_pref_age/i.test(m)) return 'العمر المدخل يجب أن يكون بين 18 و100 سنة، والحد الأدنى لا يتجاوز الحد الأقصى.';
   if(/chk_pref_height/i.test(m)) return 'الطول المدخل يجب أن يكون بين 100 و250 سم، والحد الأدنى لا يتجاوز الحد الأقصى.';
   if(/chk_pref_weight/i.test(m)) return 'الوزن المدخل يجب أن يكون بين 30 و300 كجم، والحد الأدنى لا يتجاوز الحد الأقصى.';
@@ -596,11 +605,26 @@ const api = {
   },
   async getCandidateById(id){
     const candidateId = String(id ?? '').trim();
-    if(!candidateId) throw {code:'invalid_candidate_id', message:'Missing candidate ID'};
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(!candidateId || !UUID_RE.test(candidateId)) throw {code:'invalid_candidate_id', message:'Missing or invalid candidate ID'};
     const session = await this.getAuthSession();
     if(!session) return this.getPublicCandidateById(candidateId);
-    // Authenticated users always use the DB-protected private RPC. Never fall back to public profile RPC.
-    return this.rpc('get_candidate_profile_by_id', {p_candidate_id:candidateId});
+    // Authenticated users use the DB-protected private RPC (get_candidate_profile_by_id — verified
+    // signature: p_candidate_id uuid). It requires an active session with auth.uid() resolvable server-side
+    // (RAISE EXCEPTION 'Not authenticated' otherwise), an active account, and a completed profile.
+    try{
+      return await this.rpc('get_candidate_profile_by_id', {p_candidate_id:candidateId});
+    }catch(err){
+      // A client-side session object can exist while the JWT is expired/stale server-side (refresh
+      // race, clock skew, revoked token). Postgres then sees auth.uid() IS NULL and raises
+      // 'Not authenticated', which PostgREST surfaces as an HTTP 400. Treat that specific case like a
+      // guest and retry against the public RPC instead of surfacing a raw 400 to the user.
+      const msg = (err && err.message) || '';
+      if(/not authenticated/i.test(msg)){
+        return this.getPublicCandidateById(candidateId);
+      }
+      throw err;
+    }
   },
   // Public, anon-safe discovery — no session required. Never returns phone/email/sensitive data.
   getPublicCandidateProfiles(filters){ return this.rpc('get_public_candidate_profiles', filters); },
@@ -629,7 +653,30 @@ const api = {
   adminReviewDisclosure(id, decision, reason){ return this.rpc('admin_review_contact_disclosure', {p_disclosure_id:id,p_decision:decision,p_reason:reason||null}); },
   adminUpdateComplaint(id,status,action,notes){ return this.rpc('admin_update_complaint', {p_complaint_id:id,p_status:status,p_admin_action:action||null,p_admin_notes:notes||null}); },
   adminIssueWarning(userId,reason,evidence,notes){ return this.rpc('admin_issue_warning', {p_target_user_id:userId,p_reason:reason,p_evidence:evidence||null,p_notes:notes||null}); },
-  adminSetWarningStatus(id,status,notes){ return this.rpc('admin_set_warning_status', {p_warning_id:id,p_status:status,p_notes:notes||null}); }
+  adminSetWarningStatus(id,status,notes){ return this.rpc('admin_set_warning_status', {p_warning_id:id,p_status:status,p_notes:notes||null}); },
+  // Chat — the DB layer (chat_threads/chat_messages tables, RLS, admin_list_chat_threads RPC)
+  // already existed and is used as-is here; no new tables/RPCs/columns are created for it.
+  async myChatThreads(){
+    const {data, error} = await sb.from('chat_threads').select('*').order('updated_at',{ascending:false});
+    if(error) throw error; return data||[];
+  },
+  async createChatThread(subject){
+    const {data, error} = await sb.from('chat_threads').insert({user_id:S.session.user.id, subject:subject||null}).select().single();
+    if(error) throw error; return data;
+  },
+  async chatMessages(threadId){
+    const {data, error} = await sb.from('chat_messages').select('*').eq('thread_id',threadId).order('created_at',{ascending:true});
+    if(error) throw error; return data||[];
+  },
+  async sendChatMessage(threadId, body){
+    const {data, error} = await sb.from('chat_messages').insert({thread_id:threadId, sender_id:S.session.user.id, body}).select().single();
+    if(error) throw error; return data;
+  },
+  adminListChatThreads(){ return this.rpc('admin_list_chat_threads'); },
+  async adminSetThreadStatus(threadId, status){
+    const {data, error} = await sb.from('chat_threads').update({status, closed_at: status==='closed'?new Date().toISOString():null}).eq('id',threadId).select().single();
+    if(error) throw error; return data;
+  }
 };
 
 /* =========================================================
@@ -639,8 +686,16 @@ const api = {
 // confirmation-link flow to be the mechanism the user relies on. With "Confirm email" ON in the
 // project's Auth settings, Supabase creates the account as unconfirmed and — as long as the Confirm
 // signup email template contains {{ .Token }} — sends a 6-digit numeric code to that same address.
-async function doSignUp(email, password){
-  const {data, error} = await sb.auth.signUp({ email, password });
+// full_name/phone travel to Postgres as auth.users.raw_user_meta_data via signUp's options.data.
+// The handle_new_auth_user() DB trigger (public schema) is the real, authoritative enforcement:
+// it requires and validates both for email/password signups, and rolls back the entire account
+// creation (no auth.users row, no user_accounts/user_profiles rows) if either is missing or
+// invalid — this call is not relied upon as the only line of defense.
+async function doSignUp(email, password, fullName, phone){
+  const {data, error} = await sb.auth.signUp({
+    email, password,
+    options: { data: { full_name: fullName, phone: phone } }
+  });
   if(error) throw error;
   return data;
 }
@@ -748,8 +803,8 @@ async function loadAccountContext(){
   try{
     S.isAdmin = await api.isAdmin();
     if(S.isAdmin){
-      const [rv, rr, am] = await Promise.all([api.hasPerm('requests.view'), api.hasPerm('requests.review'), api.hasPerm('admins.manage')]);
-      S.adminPerms = {'requests.view':rv, 'requests.review':rr, 'admins.manage':am};
+      const [rv, rr, am, mm] = await Promise.all([api.hasPerm('requests.view'), api.hasPerm('requests.review'), api.hasPerm('admins.manage'), api.hasPerm('messages.moderate')]);
+      S.adminPerms = {'requests.view':rv, 'requests.review':rr, 'admins.manage':am, 'messages.moderate':mm};
     }
   }catch(e){ S.isAdmin=false; }
 }
@@ -815,6 +870,7 @@ async function render(){
       case 'matches': await mountMatches(app); break;
       case 'requests': await mountRequests(app); break;
       case 'guardians': await mountGuardians(app); break;
+      case 'chat': await mountChat(app); break;
       case 'admin': await mountAdmin(app); break;
       default: app.innerHTML = emptyBox('🔍','الصفحة غير موجودة','تحقق من الرابط أو عد للرئيسية.');
     }
@@ -852,7 +908,7 @@ function renderSidebar(){
     ['/dashboard','🏠','الرئيسية'],['/discovery','🔎','استكشاف'],['/matches','💞','التوافق'],
     ['/requests','✉️','طلبات الزواج']
   ];
-  const secondary=[['/profile','👤','ملفي'],['/preferences','⚙️','تفضيلاتي'],['/guardians','👪','الأولياء']];
+  const secondary=[['/profile','👤','ملفي'],['/preferences','⚙️','تفضيلاتي'],['/guardians','👪','الأولياء'],['/chat','💬','تواصل مع الإدارة']];
   const admin=S.isAdmin?[['/admin','🛡️','الإدارة']]:[];
   const group=(title,items)=>`<div class="sidebar-section">${title}</div>${items.map(([p,i,l])=>`<div class="sidebar-link ${S.route===p?'active':''}" data-nav="${p}"><span class="sidebar-icon">${i}</span><span>${l}</span></div>`).join('')}`;
   root.innerHTML=`<div style="font-weight:900;font-size:19px;color:var(--c-primary);padding:0 10px 14px;">مودة <span style="color:var(--c-accent)">•</span></div>
@@ -912,8 +968,14 @@ function renderBottomNav(){
   document.body.classList.remove('has-bottomnav');
   if(!S.session){ root.innerHTML=''; return; }
   const items = [
-    ['/dashboard','🏠','الرئيسية'],['/discovery','🔎','استكشاف'],['/matches','💞','التوافق'],['/requests','✉️','الطلبات'],['/profile','👤','ملفي']
+    ['/dashboard','🏠','الرئيسية'],['/discovery','🔎','استكشاف'],['/requests','✉️','الطلبات'],['/profile','👤','الحساب']
   ];
+  // S.isAdmin is set from the real DB-backed is_admin() RPC (see checkSession/bootstrap), never from
+  // localStorage or any client-only flag. is_admin() returns true for SUPER_ADMIN too (verified against
+  // the live schema: it checks for any active row in user_admin_roles, and SUPER_ADMIN is one such active
+  // role), so this single DB-verified flag correctly covers both Admin and SUPER_ADMIN — no separate
+  // SUPER_ADMIN branch or extra RPC call is needed here.
+  if(S.isAdmin) items.push(['/admin','🛡️','الإدارة']);
   root.innerHTML = `<div class="bottom-nav">${items.map(([p,i,l])=>`
     <div class="bn-item ${S.route===p?'active':''}" data-nav="${p}"><span class="bn-icon">${i}</span>${l}</div>
   `).join('')}</div>`;
@@ -1030,12 +1092,11 @@ function viewContact(){
     <div class="page-heading"><div><div class="eyebrow">تواصل معنا</div><h2>الدعم والتواصل مع الإدارة</h2></div></div>
     <div class="profile-section">
       <h3>حالة قناة التواصل حاليًا</h3>
-      <p>نظام الدردشة المباشرة بين الأعضاء والإدارة لم يُفعَّل بعد داخل المنصة. حتى إتاحته، يتم التواصل مع الإدارة بشكل غير مباشر عبر مسارات موجودة فعليًا في النظام:</p>
+      <p>يمكن للأعضاء المسجَّلين الآن التواصل مباشرة مع إدارة المنصة عبر صفحة <a style="color:var(--c-primary);font-weight:800;cursor:pointer;" data-nav="/chat">المحادثات</a> بعد تسجيل الدخول. بالإضافة إلى ذلك:</p>
       <ul style="margin:10px 0 0;padding-inline-start:20px;line-height:2;">
         <li>طلبات الزواج التي ترسلها تمر تلقائيًا على مراجعة الإدارة قبل وصولها للطرف الآخر.</li>
         <li>بيانات الأولياء التي تسجّلها في حسابك متاحة للإدارة ضمن صلاحياتها لمتابعة الطلبات.</li>
       </ul>
-      <p style="margin-top:10px;">سنضيف قناة تواصل مباشرة هنا فور تنفيذها فعليًا في قاعدة البيانات، دون استخدام بيانات وهمية إلى أن يحدث ذلك.</p>
     </div>
     <p class="center" style="margin-top:14px;"><a style="color:var(--c-primary);font-weight:800;cursor:pointer;" data-nav="/">العودة للرئيسية</a></p>
   </div>`;
@@ -1067,7 +1128,11 @@ function oauthButtonsHtml(){
 function viewRegister(){
   return `<div class="auth-shell"><div class="auth-card">
     <div class="auth-mark">💍</div><div class="eyebrow">خطوة أولى</div><h2>إنشاء حساب جديد</h2><p>أنشئ حسابك للوصول إلى الوظائف الخاصة بالمنصة.</p>
-    <div id="auth-error"></div><label>البريد الإلكتروني</label><input type="email" id="f-email" autocomplete="email">
+    <div id="auth-error"></div>
+    <label>الاسم الكامل</label><input type="text" id="f-full-name" autocomplete="name">
+    <label>رقم الهاتف</label><input type="tel" id="f-phone" autocomplete="tel" placeholder="01xxxxxxxxx" dir="ltr">
+    <p class="hint">رقم موبايل مصري صالح، مثال: 01012345678</p>
+    <label>البريد الإلكتروني</label><input type="email" id="f-email" autocomplete="email">
     <label>كلمة المرور</label>
     <div class="pw-field"><input type="password" id="f-password" autocomplete="new-password"><button type="button" class="pw-toggle" id="f-password-toggle" aria-label="إظهار كلمة المرور">👁️</button></div>
     <p class="hint">6 أحرف على الأقل.</p>
@@ -1177,10 +1242,19 @@ function mountAuthForm(mode){
       errBox.innerHTML = `<p class="field-error">كلمتا المرور غير متطابقتين.</p>`;
       return;
     }
+    // Client-side check is UX-only (fast feedback, no round trip) — the DB trigger on
+    // auth.users is what actually blocks account creation if either is missing/invalid.
+    let fullName, phone;
+    if(mode==='register'){
+      fullName = document.getElementById('f-full-name').value.trim();
+      phone = document.getElementById('f-phone').value.trim();
+      if(!fullName){ errBox.innerHTML = `<p class="field-error">أدخل الاسم الكامل.</p>`; return; }
+      if(!phone){ errBox.innerHTML = `<p class="field-error">أدخل رقم الهاتف.</p>`; return; }
+    }
     btn.disabled = true; btn.textContent = 'جارٍ التنفيذ…';
     try{
       if(mode==='register'){
-        const data = await doSignUp(email, password);
+        const data = await doSignUp(email, password, fullName, phone);
         // Anti-enumeration: if this email is already registered & confirmed, Supabase returns a
         // user object with an EMPTY identities array and sends no email at all. Detect that and
         // send the person to login instead of parking them on an OTP screen that will never fill.
@@ -1472,6 +1546,102 @@ async function mountDashboardNotifications(){
 async function mountDashboardContacts(){
   const box=document.getElementById('dashboard-contacts'); if(!box) return;
   try{ const rows=await api.getApprovedContacts(); box.innerHTML=rows.length?rows.map(c=>`<div class="card card-tight" style="margin-bottom:8px;"><strong>${c.contact_type==='guardian_phone'?'هاتف ولي الأمر':'الهاتف الشخصي'}</strong><p class="mb0">${c.guardian_name?c.guardian_name+' · ':''}${c.relationship?c.relationship+' · ':''}<strong dir="ltr">${c.phone||'—'}</strong></p></div>`).join(''):emptyBox('🔒','لا توجد بيانات اتصال معتمدة','تظهر بيانات الاتصال فقط بعد القبول المتبادل وموافقة الإدارة.'); }catch(e){box.innerHTML=errorBox(e);}
+}
+
+/* =========================================================
+   CHAT — member ↔ platform administration
+   Built on top of the existing chat_threads/chat_messages tables, RLS and
+   admin_list_chat_threads() RPC (already present in the DB — see api.js wrappers above).
+   No new table/column/RPC was created for this.
+========================================================= */
+let chatActiveThreadId = null;
+async function mountChat(app){
+  app.innerHTML = loadingBox('جارٍ تحميل محادثاتك…');
+  let threads;
+  try{ threads = await api.myChatThreads(); }catch(e){ app.innerHTML = errorBox(e); return; }
+  if(threads.length && !chatActiveThreadId) chatActiveThreadId = threads[0].id;
+  renderChatShell(app, threads);
+}
+function chatStatusBadge(status){
+  return status==='closed' ? `<span class="badge badge-muted">مغلقة</span>` : `<span class="badge badge-success">مفتوحة</span>`;
+}
+function renderChatShell(app, threads){
+  app.innerHTML = `<div class="container">
+    <div class="page-heading"><div><div class="eyebrow">الدعم</div><h2>المحادثات مع الإدارة</h2><p class="mb0">تواصل مباشر بينك وبين إدارة المنصة.</p></div>
+      <button class="btn btn-primary btn-sm" id="chat-new-btn">محادثة جديدة</button></div>
+    <div class="grid grid-2">
+      <div>
+        <div class="section-title"><h3>محادثاتي</h3></div>
+        <div id="chat-thread-list">${threads.length?'':emptyBox('💬','لا توجد محادثات بعد','ابدأ محادثة جديدة مع إدارة المنصة.')}</div>
+      </div>
+      <div>
+        <div class="section-title"><h3>المحادثة</h3></div>
+        <div id="chat-messages-panel" class="card"></div>
+      </div>
+    </div>
+  </div>`;
+  const list = document.getElementById('chat-thread-list');
+  list.innerHTML = threads.map(t=>`
+    <div class="card card-tight chat-thread-item ${t.id===chatActiveThreadId?'active':''}" data-thread="${t.id}" style="margin-bottom:8px;cursor:pointer;${t.id===chatActiveThreadId?'border-color:var(--c-primary);':''}">
+      <div class="flex-between"><strong>${t.subject||'محادثة عامة'}</strong>${chatStatusBadge(t.status)}</div>
+      <p class="mb0 muted" style="font-size:12px;">آخر تحديث: ${new Date(t.updated_at).toLocaleString('ar-EG')}</p>
+    </div>`).join('');
+  list.querySelectorAll('[data-thread]').forEach(el=>el.onclick=()=>{ chatActiveThreadId = el.dataset.thread; renderChatShell(app, threads); });
+  document.getElementById('chat-new-btn').onclick = ()=>openNewChatThreadModal(app);
+  if(chatActiveThreadId){ renderChatMessagesPanel(threads.find(t=>t.id===chatActiveThreadId)); }
+  else { document.getElementById('chat-messages-panel').innerHTML = `<p class="muted">اختر محادثة من القائمة أو ابدأ محادثة جديدة.</p>`; }
+}
+function openNewChatThreadModal(app){
+  openModal(`<h3>محادثة جديدة</h3>
+    <label>الموضوع (اختياري)</label><input type="text" id="chat-new-subject" maxlength="200">
+    <label>رسالتك الأولى</label><textarea id="chat-new-body" maxlength="10000"></textarea>
+    <div class="flex gap8" style="justify-content:flex-end;margin-top:12px;">
+      <button class="btn btn-ghost" id="chat-new-cancel">إلغاء</button>
+      <button class="btn btn-primary" id="chat-new-send">إرسال</button>
+    </div>`, root=>{
+    root.querySelector('#chat-new-cancel').onclick = closeModal;
+    root.querySelector('#chat-new-send').onclick = async ()=>{
+      const body = val('chat-new-body');
+      if(!body){ toast('اكتب رسالتك أولًا','error'); return; }
+      try{
+        const thread = await api.createChatThread(val('chat-new-subject')||null);
+        await api.sendChatMessage(thread.id, body);
+        chatActiveThreadId = thread.id;
+        closeModal();
+        await mountChat(document.getElementById('app'));
+      }catch(e){ toast(friendlyError(e),'error'); }
+    };
+  });
+}
+async function renderChatMessagesPanel(thread){
+  const panel = document.getElementById('chat-messages-panel');
+  if(!thread){ panel.innerHTML = `<p class="muted">اختر محادثة من القائمة.</p>`; return; }
+  panel.innerHTML = loadingBox();
+  let messages;
+  try{ messages = await api.chatMessages(thread.id); }catch(e){ panel.innerHTML = errorBox(e); return; }
+  const uid = S.session.user.id;
+  panel.innerHTML = `
+    <div class="chat-messages" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+      ${messages.map(m=>`<div class="card card-tight" style="align-self:${m.sender_id===uid?'flex-end':'flex-start'};max-width:85%;background:${m.sender_id===uid?'var(--c-primary)':'var(--c-surface-2)'};color:${m.sender_id===uid?'#fff':'var(--c-text)'};">
+        <p class="mb0" style="color:inherit;">${(m.body||'').replace(/</g,'&lt;')}</p>
+        <p class="mb0" style="font-size:10.5px;opacity:.75;margin-top:4px;color:inherit;">${new Date(m.created_at).toLocaleString('ar-EG')}</p>
+      </div>`).join('') || `<p class="muted">لا توجد رسائل بعد.</p>`}
+    </div>
+    ${thread.status==='closed'
+      ? `<p class="hint" style="margin-top:10px;">هذه المحادثة مغلقة من الإدارة.</p>`
+      : `<div class="flex gap8" style="margin-top:10px;"><textarea id="chat-reply-body" style="flex:1;min-height:50px;" placeholder="اكتب رسالتك…"></textarea><button class="btn btn-primary" id="chat-reply-send">إرسال</button></div>`}
+  `;
+  const sendBtn = document.getElementById('chat-reply-send');
+  if(sendBtn){
+    sendBtn.onclick = async ()=>{
+      const body = val('chat-reply-body');
+      if(!body){ return; }
+      sendBtn.disabled = true;
+      try{ await api.sendChatMessage(thread.id, body); await renderChatMessagesPanel(thread); }
+      catch(e){ toast(friendlyError(e),'error'); }
+      finally{ sendBtn.disabled = false; }
+    };
+  }
 }
 
 /* =========================================================
@@ -2172,14 +2342,85 @@ async function mountAdmin(app){
     <div class="page-heading"><div><div class="eyebrow">Administration</div><h2>لوحة الإدارة</h2><p class="mb0">إدارة الطلبات والسلامة والبلاغات والتنبيهات والصلاحيات.</p></div></div>
     <div class="admin-nav"><div class="admin-group"><h4>Management</h4><p class="mb0">طلبات الزواج والمستخدمون.</p></div><div class="admin-group"><h4>Safety</h4><p class="mb0">البلاغات والتنبيهات والإيقاف.</p></div><div class="admin-group"><h4>Contact</h4><p class="mb0">مراجعة كشف بيانات الاتصال بعد القبول المتبادل.</p></div><div class="admin-group"><h4>Audit</h4><p class="mb0">التغييرات الحساسة تسجل في سجل التدقيق الموجود.</p></div></div>
     <div class="section-title"><h3>طلبات الزواج بانتظار المراجعة</h3></div><div id="admin-req-list">${loadingBox()}</div>
+    ${S.adminPerms['messages.moderate'] ? `<div class="section-title"><h3>محادثات الأعضاء</h3></div><div class="grid grid-2"><div id="admin-chat-thread-list">${loadingBox()}</div><div id="admin-chat-messages-panel" class="card"><p class="muted">اختر محادثة من القائمة.</p></div></div>` : ''}
     ${superAdmin ? `<div class="section-title"><h3>إدارة المشرفين</h3></div><div class="card"><div class="flex-between"><h4 class="mb0">بحث بالاسم أو البريد أو Member Code</h4></div><div class="flex gap8" style="margin-top:10px;"><input type="text" id="am-search" placeholder="الاسم / البريد / MW-...." style="flex:1;"><button class="btn btn-outline btn-sm" id="am-search-btn">بحث</button></div><div id="am-search-results" style="margin-top:12px;"></div></div><div class="section-title"><h3>المشرفون الحاليون</h3></div><div id="am-admins-list">${loadingBox()}</div>`:''}
     <div class="section-title"><h3>بلاغات المستخدمين</h3></div><div id="admin-complaints">${loadingBox()}</div>
     <div class="section-title"><h3>التنبيهات الإدارية</h3></div><div id="admin-warnings">${loadingBox()}</div>
     <div class="section-title"><h3>طلبات كشف بيانات الاتصال</h3></div><div id="admin-disclosures">${loadingBox()}</div>
   </div>`;
   await renderAdminRequests();
+  if(S.adminPerms['messages.moderate']) await renderAdminChatThreads();
   if(superAdmin){ mountAdminManagement(); await renderAdminsList(); }
   await renderAdminComplaints(); await renderAdminWarnings(); await renderAdminDisclosures();
+}
+
+let adminChatActiveThreadId = null;
+async function renderAdminChatThreads(){
+  const box = document.getElementById('admin-chat-thread-list');
+  if(!box) return;
+  try{
+    const threads = await api.adminListChatThreads();
+    if(!threads.length){ box.innerHTML = emptyBox('💬','لا توجد محادثات','ستظهر هنا محادثات الأعضاء مع الإدارة.'); return; }
+    box.innerHTML = threads.map(t=>`
+      <div class="card card-tight admin-chat-thread-item" data-athread="${t.thread_id}" style="margin-bottom:8px;cursor:pointer;${t.thread_id===adminChatActiveThreadId?'border-color:var(--c-primary);':''}">
+        <div class="flex-between"><strong>${t.full_name||t.member_code}</strong>${t.is_unread?`<span class="badge badge-warn">جديدة</span>`:chatStatusBadge(t.status)}</div>
+        <p class="mb0 muted" style="font-size:12px;">${t.member_code} · ${t.subject||'—'}</p>
+        <p class="mb0" style="font-size:12.5px;margin-top:4px;">${(t.last_message||'—').slice(0,80)}</p>
+      </div>`).join('');
+    box.querySelectorAll('[data-athread]').forEach(el=>el.onclick=()=>{
+      adminChatActiveThreadId = el.dataset.athread;
+      const t = threads.find(x=>x.thread_id===adminChatActiveThreadId);
+      renderAdminChatThreads();
+      renderAdminChatMessagesPanel(t);
+    });
+    if(adminChatActiveThreadId){
+      const t = threads.find(x=>x.thread_id===adminChatActiveThreadId);
+      if(t) await renderAdminChatMessagesPanel(t);
+    }
+  }catch(e){ box.innerHTML = errorBox(e); }
+}
+async function renderAdminChatMessagesPanel(thread){
+  const panel = document.getElementById('admin-chat-messages-panel');
+  if(!panel) return;
+  if(!thread){ panel.innerHTML = `<p class="muted">اختر محادثة من القائمة.</p>`; return; }
+  panel.innerHTML = loadingBox();
+  let messages;
+  try{ messages = await api.chatMessages(thread.thread_id); }catch(e){ panel.innerHTML = errorBox(e); return; }
+  const uid = S.session.user.id;
+  panel.innerHTML = `
+    <div class="flex-between"><strong>${thread.full_name||thread.member_code}</strong>${chatStatusBadge(thread.status)}</div>
+    <div class="chat-messages" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-top:10px;">
+      ${messages.map(m=>`<div class="card card-tight" style="align-self:${m.sender_id===uid?'flex-end':'flex-start'};max-width:85%;background:${m.sender_id===uid?'var(--c-primary)':'var(--c-surface-2)'};color:${m.sender_id===uid?'#fff':'var(--c-text)'};">
+        <p class="mb0" style="color:inherit;">${(m.body||'').replace(/</g,'&lt;')}</p>
+        <p class="mb0" style="font-size:10.5px;opacity:.75;margin-top:4px;color:inherit;">${new Date(m.created_at).toLocaleString('ar-EG')}</p>
+      </div>`).join('') || `<p class="muted">لا توجد رسائل بعد.</p>`}
+    </div>
+    <div class="flex gap8" style="margin-top:10px;">
+      ${thread.status==='closed'
+        ? `<button class="btn btn-outline btn-sm" id="admin-chat-reopen">إعادة فتح المحادثة</button>`
+        : `<textarea id="admin-chat-reply-body" style="flex:1;min-height:50px;" placeholder="اكتب ردك…"></textarea><button class="btn btn-primary" id="admin-chat-reply-send">إرسال</button><button class="btn btn-danger btn-sm" id="admin-chat-close">إغلاق</button>`}
+    </div>`;
+  const sendBtn = document.getElementById('admin-chat-reply-send');
+  if(sendBtn) sendBtn.onclick = async ()=>{
+    const body = val('admin-chat-reply-body');
+    if(!body) return;
+    sendBtn.disabled = true;
+    try{ await api.sendChatMessage(thread.thread_id, body); await renderAdminChatMessagesPanel(thread); await renderAdminChatThreads(); }
+    catch(e){ toast(friendlyError(e),'error'); }
+    finally{ sendBtn.disabled = false; }
+  };
+  const closeBtn = document.getElementById('admin-chat-close');
+  if(closeBtn) closeBtn.onclick = ()=>{
+    confirmModal('إغلاق المحادثة','هل تريد إغلاق هذه المحادثة؟','إغلاق', async ()=>{
+      try{ await api.adminSetThreadStatus(thread.thread_id,'closed'); toast('تم إغلاق المحادثة','success'); await renderAdminChatThreads(); }
+      catch(e){ toast(friendlyError(e),'error'); }
+    }, true);
+  };
+  const reopenBtn = document.getElementById('admin-chat-reopen');
+  if(reopenBtn) reopenBtn.onclick = async ()=>{
+    try{ await api.adminSetThreadStatus(thread.thread_id,'open'); toast('تم إعادة فتح المحادثة','success'); await renderAdminChatThreads(); }
+    catch(e){ toast(friendlyError(e),'error'); }
+  };
 }
 
 async function renderAdminComplaints(){
