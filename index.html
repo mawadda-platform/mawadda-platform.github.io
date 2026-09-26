@@ -714,6 +714,10 @@ function friendlyError(err){
       message: err.message, code: err.code, details: err.details, hint: err.hint
     });
   }
+  // Client-side field validation errors (e.g. from intOrNull) are already clear, translated,
+  // user-facing Arabic messages — show them as-is instead of falling through to the generic
+  // catch-all below.
+  if(err && err.isValidationError) return err.message;
   const m = (err && err.message) ? err.message : String(err||'حدث خطأ غير متوقع');
   const code = err && err.code;
   if(/governorate_id is required when city_id is set/i.test(m)) return 'تعذر تحديد المحافظة تلقائيًا — يرجى اختيار المحافظة ثم المركز مرة أخرى.';
@@ -844,6 +848,7 @@ const api = {
   adminListAdmins(){ return this.rpc('admin_list_admins'); },
   adminSearchUsersBasic(search){ return this.rpc('admin_search_users_basic', {p_search:search||null}); },
   adminListAllAccounts(){ return this.rpc('admin_list_all_accounts'); },
+  adminGetFullProfile(userId){ return this.rpc('admin_get_full_profile', {p_user_id:userId}); },
   upsertMyPhone(phone){ return this.rpc('upsert_my_phone', {p_phone:phone}); },
   adminGrantRole(userId, roleCode){ return this.rpc('admin_grant_role', {p_user_id:userId, p_role_code:roleCode}); },
   adminRevokeRole(userId, roleCode){ return this.rpc('admin_revoke_role', {p_user_id:userId, p_role_code:roleCode}); },
@@ -2046,8 +2051,8 @@ function renderBasicForm(panel, p){
       <div><label>تاريخ الميلاد</label><input type="date" id="pf-date_of_birth" value="${p.date_of_birth||''}"></div>
     </div>
     <div class="row-2">
-      <div><label>الطول (سم)</label><input type="number" id="pf-height_cm" value="${p.height_cm||''}"></div>
-      <div><label>الوزن (كجم)</label><input type="number" id="pf-weight_kg" value="${p.weight_kg||''}"></div>
+      <div><label>الطول (سم)</label><input type="number" id="pf-height_cm" step="1" min="100" max="250" value="${p.height_cm||''}"></div>
+      <div><label>الوزن (كجم)</label><input type="number" id="pf-weight_kg" step="1" min="30" max="300" value="${p.weight_kg||''}"></div>
     </div>
     <div class="row-2">
       <div><label>البنية الجسدية</label><select id="pf-body_build"><option value="">—</option>${selOpts('body_build',p.body_build)}</select>
@@ -2073,7 +2078,7 @@ function renderBasicForm(panel, p){
     </div>
     <div class="row-2">
       <div><label>الحالة الاجتماعية</label><select id="pf-marital_status"><option value="">اختر</option>${selOpts('marital_status',p.marital_status)}</select></div>
-      <div><label>عدد الأبناء</label><input type="number" min="0" id="pf-children_count" value="${p.children_count||0}"></div>
+      <div><label>عدد الأبناء</label><input type="number" step="1" min="0" id="pf-children_count" value="${p.children_count||0}"></div>
     </div>
     <div class="row-2">
       <div><label>الحالة الصحية</label><select id="pf-health_status">${selOpts('health_status',p.health_status||'good')}</select></div>
@@ -2148,10 +2153,16 @@ function renderBasicForm(panel, p){
     const btn = document.getElementById('pf-save');
     btn.disabled=true; btn.textContent='جارٍ الحفظ…';
     try{
+      // Validate every smallint-backed numeric field up front, before building the payload,
+      // so a bad value (e.g. a decimal like "191.4") never reaches the DB as 22P02 — the user
+      // gets one clear, field-specific message instead.
+      const height_cm = intOrNull('pf-height_cm', 'الطول', 100, 250);
+      const weight_kg = intOrNull('pf-weight_kg', 'الوزن', 30, 300);
+      const children_count = intOrNull('pf-children_count', 'عدد الأبناء', 0) ?? 0;
       const payload = {
         user_id: S.session.user.id,
         full_name: val('pf-full_name'), gender: val('pf-gender')||null, date_of_birth: val('pf-date_of_birth')||null,
-        height_cm: numOrNull('pf-height_cm'), weight_kg: numOrNull('pf-weight_kg'),
+        height_cm, weight_kg,
         body_build: val('pf-body_build')||null,
         body_build_other_details: val('pf-body_build')==='other' ? (val('pf-body_build_other_details')||null) : null,
         skin_tone: val('pf-skin_tone')||null,
@@ -2160,7 +2171,7 @@ function renderBasicForm(panel, p){
         hair_color_other_details: val('pf-hair_color')==='other' ? (val('pf-hair_color_other_details')||null) : null,
         education_level: val('pf-education_level')||null, education_major: val('pf-education_major')||null,
         job_title: val('pf-job_title')||null, work_stability: val('pf-work_stability')||null,
-        marital_status: val('pf-marital_status')||null, children_count: numOrNull('pf-children_count')||0,
+        marital_status: val('pf-marital_status')||null, children_count,
         health_status: val('pf-health_status'), disability_type: val('pf-disability_type'),
         disability_other_details: val('pf-disability_other_details')||null,
         governorate_id: numOrNull('pf-governorate_id'), city_id: numOrNull('pf-city_id'),
@@ -2201,6 +2212,19 @@ function wireOtherReveal(selectId, fieldPrefix){
 }
 function val(id){ const el=document.getElementById(id); return el? el.value.trim ? el.value.trim() : el.value : ''; }
 function numOrNull(id){ const v = val(id); return (v===''||v===undefined) ? null : Number(v); }
+// Strict integer parser for smallint DB columns (height_cm, weight_kg, children_count, ...).
+// Throws a clear Arabic error instead of silently rounding or letting a decimal reach Postgres
+// as "invalid input syntax for type smallint" (22P02).
+function intOrNull(id, label, lo, hi){
+  const v = val(id);
+  if(v===''||v===undefined||v===null) return null;
+  const n = Number(v);
+  if(!Number.isFinite(n)) throw Object.assign(new Error(`${label}: قيمة غير صالحة`), {isValidationError:true});
+  if(!Number.isInteger(n)) throw Object.assign(new Error(`${label} يجب أن يكون رقمًا صحيحًا بدون كسور عشرية (مثال: 191 وليس 191.4)`), {isValidationError:true});
+  if(lo!==undefined && n<lo) throw Object.assign(new Error(`${label} يجب ألا يقل عن ${lo}`), {isValidationError:true});
+  if(hi!==undefined && n>hi) throw Object.assign(new Error(`${label} يجب ألا يزيد عن ${hi}`), {isValidationError:true});
+  return n;
+}
 // Formats a DB timestamp (e.g. user_accounts.created_at) as "26/09/2026 — 05:10 م".
 // Always derived from the timestamp string itself — never the local clock or localStorage.
 function formatDateTimeAr(iso){
@@ -2889,18 +2913,105 @@ async function renderAdminAllAccounts(){
       const authLine = r.google_email
         ? `<p class="mb0 muted">Google: ${r.google_email}</p>`
         : (r.email ? `<p class="mb0 muted">Email: ${r.email}</p>` : `<p class="mb0 muted">—</p>`);
-      return `<div class="card card-tight" style="margin-bottom:8px;">
+      return `<div class="card card-tight admin-account-card" data-open-user="${r.account_id}" style="margin-bottom:8px;cursor:pointer;">
         <p class="mb0"><strong>Member Code: ${r.member_code}</strong>${r.full_name?` · ${r.full_name}`:''}</p>
         <p class="mb0 muted" style="font-size:12px;">Account ID: ${r.account_id}</p>
         ${authLine}
         <p class="mb0 muted" style="font-size:12px;">الحالة: ${r.status} — أُنشئ: ${formatDateTimeAr(r.created_at)}</p>
       </div>`;
     }).join('');
+    box.querySelectorAll('[data-open-user]').forEach(el=>el.onclick=()=>openAdminUserDetail(el.dataset.openUser));
   }catch(e){ box.innerHTML = errorBox(e); }
   const filterEl = document.getElementById('aa-filter');
   if(filterEl && !filterEl.dataset.wired){
     filterEl.dataset.wired = '1';
     filterEl.oninput = ()=>renderAdminAllAccounts();
+  }
+}
+
+// Unified admin user-detail view — used from: the all-accounts list (Member Code/Email ↔
+// Account ↔ Auth), and from the pending marriage-requests review (sender/recipient). Reuses
+// the existing L()/LABELS enum-label mapping, avatarPhotoHtml(), formatDateTimeAr() and
+// openModal() instead of building a separate profile system. Phone is only shown when the
+// RPC itself returned it (gated server-side on the phone.view admin permission).
+async function openAdminUserDetail(userId){
+  openModal(`<h3>ملف العضو</h3><div id="admin-user-detail-body">${loadingBox()}</div>`, ()=>{});
+  try{
+    const d = await api.adminGetFullProfile(userId);
+    const acc = d.account || {};
+    const p = d.profile || {};
+    const l = d.lifestyle || {};
+    const t = d.traits || {};
+    const s = d.sensitive || {};
+    const children = d.children || [];
+    const row = (label,value)=> (value===null||value===undefined||value==='') ? '' :
+      `<p class="mb0"><strong>${label}:</strong> ${value}</p>`;
+    const authLine = acc.google_email ? `Google: ${acc.google_email}` : (acc.email ? `Email: ${acc.email}` : '—');
+    const locationParts = [d.governorate&&d.governorate.name_ar, d.city&&d.city.name_ar, d.district&&d.district.name_ar, p.village_area].filter(Boolean);
+    const body = `
+      <div class="flex gap8" style="align-items:center;margin-bottom:10px;">
+        ${avatarPhotoHtml(p.avatar_id, 58)}
+        <div><h4 class="mb0">${p.full_name||'—'}</h4><p class="mb0 muted" style="font-size:12px;">${acc.member_code||'—'}</p></div>
+      </div>
+      <div class="section-title" style="margin-top:4px;"><h4 class="mb0">الحساب</h4></div>
+      ${row('Member Code', acc.member_code)}
+      ${row('Account ID (UUID)', acc.user_id)}
+      ${row('طريقة الدخول', authLine)}
+      ${row('الحالة', acc.status)}
+      ${row('تاريخ الإنشاء', formatDateTimeAr(acc.created_at))}
+      ${acc.phone_visible ? row('الهاتف', acc.phone_e164 || '— غير مُسجَّل —') : `<p class="mb0 muted" style="font-size:12px;">الهاتف مخفي — يتطلب صلاحية phone.view.</p>`}
+      <div class="section-title" style="margin-top:12px;"><h4 class="mb0">البيانات الأساسية</h4></div>
+      ${row('الجنس', L('gender', p.gender))}
+      ${row('تاريخ الميلاد', p.date_of_birth)}
+      ${row('الحالة الاجتماعية', L('marital_status', p.marital_status))}
+      ${row('الطول', p.height_cm!=null?`${p.height_cm} سم`:null)}
+      ${row('الوزن', p.weight_kg!=null?`${p.weight_kg} كجم`:null)}
+      ${row('البنية', L('body_build', p.body_build))}
+      ${row('لون البشرة', L('skin_tone', p.skin_tone))}
+      ${row('لون الشعر', L('hair_color', p.hair_color))}
+      ${p.gender==='male' ? row('اللحية', L('beard', p.beard)) : ''}
+      ${p.gender==='female' ? row('الحجاب', L('hijab', p.hijab)) : ''}
+      ${row('الحالة الصحية', L('health_status', p.health_status))}
+      ${row('الإعاقة', p.disability_type && p.disability_type!=='none' ? (L('disability_type', p.disability_type)+(p.disability_other_details?` — ${p.disability_other_details}`:'')) : null)}
+      <div class="section-title" style="margin-top:12px;"><h4 class="mb0">الموقع</h4></div>
+      ${row('المحافظة/المركز/المنطقة', locationParts.length?locationParts.join(' — '):null)}
+      <div class="section-title" style="margin-top:12px;"><h4 class="mb0">التعليم والعمل</h4></div>
+      ${row('المؤهل', L('education_level', p.education_level))}
+      ${row('التخصص', p.education_major)}
+      ${row('الوظيفة', p.job_title)}
+      ${row('استقرار العمل', L('work_stability', p.work_stability))}
+      <div class="section-title" style="margin-top:12px;"><h4 class="mb0">السكن</h4></div>
+      ${row('حالة السكن', L('housing_status', l.housing_status))}
+      ${row('نوع السكن', L('housing_type', l.housing_type)+(l.housing_type==='other'&&l.housing_type_other_details?` — ${l.housing_type_other_details}`:''))}
+      ${row('الاستعداد للانتقال', L('relocation_willingness', l.relocation_willingness))}
+      ${row('العمل بعد الزواج', L('work_after_marriage', l.work_after_marriage))}
+      ${row('الإنجاب', L('childbearing_preference', l.childbearing_preference))}
+      ${row('جاهزية السكن', L('home_readiness', l.home_readiness))}
+      <div class="section-title" style="margin-top:12px;"><h4 class="mb0">الصفات</h4></div>
+      ${row('الصلاة', L('commitment', t.prayer_commitment))}
+      ${row('الصيام', L('commitment', t.fasting_commitment))}
+      ${row('التدخين', L('smoking_status', t.smoking_status))}
+      ${row('السمات الشخصية', (t.personality_traits&&t.personality_traits.length) ? t.personality_traits.map(x=>L('personality_trait',x)).join('، ') : null)}
+      <div class="section-title" style="margin-top:12px;"><h4 class="mb0">الأبناء</h4></div>
+      ${row('عدد الأبناء', p.children_count)}
+      ${children.length ? children.map(c=>`<p class="mb0">— عمر تقريبي: ${c.approximate_age??'—'} · ${c.lives_with_user?'يعيش مع المستخدم':'لا يعيش مع المستخدم'}</p>`).join('') : ''}
+      <div class="section-title" style="margin-top:12px;"><h4 class="mb0">بيانات إضافية</h4></div>
+      ${row('نبذة', p.bio)}
+      ${row('تفاصيل صحية', s.health_details)}
+      ${row('تفاصيل زواج سابق', s.previous_marriage_details)}
+      ${row('تفاصيل عائلية حساسة', s.sensitive_family_details)}
+      ${row('تفاصيل مالية حساسة', s.sensitive_financial_details)}
+      <div class="flex gap8" style="justify-content:flex-end;margin-top:14px;"><button class="btn btn-ghost" id="aud-close">إغلاق</button></div>
+    `;
+    const target = document.getElementById('admin-user-detail-body');
+    if(target){
+      target.innerHTML = body;
+      const closeBtn = document.getElementById('aud-close');
+      if(closeBtn) closeBtn.onclick = closeModal;
+    }
+  }catch(e){
+    const target = document.getElementById('admin-user-detail-body');
+    if(target) target.innerHTML = errorBox(e);
   }
 }
 
@@ -3083,13 +3194,23 @@ async function renderAdminRequests(){
     const {data: reqs, error:e2} = await sb.from('marriage_requests').select('*').in('id', reviews.map(r=>r.request_id));
     if(e2) throw e2;
     const reqMap = Object.fromEntries(reqs.map(r=>[r.id,r]));
+    // Resolve sender/recipient Member Codes for display (falls back to the raw UUID if this
+    // admin doesn't hold users.view for some reason — never breaks the list).
+    let codeMap = {};
+    try{
+      if(!adminAllAccountsCache) adminAllAccountsCache = await api.adminListAllAccounts();
+      codeMap = Object.fromEntries(adminAllAccountsCache.map(a=>[a.account_id, a.member_code]));
+    }catch(_){ /* leave codeMap empty — UI falls back to raw UUID */ }
     list.innerHTML = reviews.map(rv=>{
       const r = reqMap[rv.request_id]; if(!r) return '';
+      const senderCode = codeMap[r.sender_id] || r.sender_id;
+      const recipientCode = codeMap[r.recipient_id] || r.recipient_id;
       return `<div class="card card-tight" style="margin-bottom:10px;">
         <p class="mb0"><strong>رقم الطلب:</strong> <span class="muted">${r.id}</span></p>
-        <p class="mb0"><strong>المرسل (UUID):</strong> <span class="muted">${r.sender_id}</span></p>
-        <p class="mb0"><strong>المستقبل (UUID):</strong> <span class="muted">${r.recipient_id}</span></p>
+        <p class="mb0"><strong>المرسل:</strong> <span class="admin-link" data-open-user="${r.sender_id}" style="cursor:pointer;color:var(--c-primary);font-weight:700;">${senderCode}</span> <span class="muted" style="font-size:12px;">(${r.sender_id})</span></p>
+        <p class="mb0"><strong>المستقبل:</strong> <span class="admin-link" data-open-user="${r.recipient_id}" style="cursor:pointer;color:var(--c-primary);font-weight:700;">${recipientCode}</span> <span class="muted" style="font-size:12px;">(${r.recipient_id})</span></p>
         <p class="mb0"><strong>تاريخ الإرسال:</strong> ${new Date(r.created_at).toLocaleString('ar-EG')}</p>
+        <p class="mb0"><strong>الحالة:</strong> ${L('request_status', r.status)}</p>
         ${S.adminPerms['requests.review']? `
         <div class="flex gap8" style="margin-top:10px;">
           <button class="btn btn-success btn-sm" data-approve="${r.id}">اعتماد</button>
@@ -3097,6 +3218,7 @@ async function renderAdminRequests(){
         </div>` : `<p class="hint">تملك صلاحية العرض فقط، وليس المراجعة.</p>`}
       </div>`;
     }).join('');
+    list.querySelectorAll('[data-open-user]').forEach(el=>el.onclick=()=>openAdminUserDetail(el.dataset.openUser));
     list.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>{
       confirmModal('اعتماد الطلب','هل تعتمد هذا الطلب لإرساله للطرف المستقبل؟','اعتماد', async ()=>{
         try{ await api.adminReview(b.dataset.approve,'approved'); toast('تم الاعتماد','success'); renderAdminRequests(); }
