@@ -871,6 +871,7 @@ const api = {
   isAdmin(){ return this.rpc('is_admin'); },
   hasPerm(code){ return this.rpc('has_admin_permission', {p_permission_code:code}); },
   adminReview(requestId, decision, reason){ return this.rpc('admin_review_marriage_request', {p_request_id:requestId, p_decision:decision, p_reason:reason||null}); },
+  adminReopenReview(requestId){ return this.rpc('admin_reopen_marriage_request_review', {p_request_id:requestId}); },
   adminListAdmins(){ return this.rpc('admin_list_admins'); },
   adminSearchUsersBasic(search){ return this.rpc('admin_search_users_basic', {p_search:search||null}); },
   adminListAllAccounts(){ return this.rpc('admin_list_all_accounts'); },
@@ -3510,9 +3511,16 @@ async function renderAdminRequestsList(){
       codeMap = Object.fromEntries(adminAllAccountsCache.map(a=>[a.account_id, a.member_code]));
     }catch(_){ /* leave codeMap empty — UI falls back to raw UUID */ }
     const showActions = adminReqTab==='review_pending' && S.adminPerms['requests.review'];
+    // Reopening only makes sense for a request the admin already decided on
+    // (review_approved/review_rejected tabs) and only while it's still untouched by the
+    // two members (status still 'pending') — matches admin_reopen_marriage_request_review's
+    // own guard, which rejects reopening once someone has accepted/declined/withdrawn it.
+    const showReopen = (adminReqTab==='review_approved' || adminReqTab==='review_rejected') && S.adminPerms['requests.review'];
     list.innerHTML = reqs.map(r=>{
       const rev = reviewMap[r.id];
-      const actions = showActions ? `<div class="flex gap8" style="margin-top:10px;"><button class="btn btn-success btn-sm" data-approve="${r.id}">اعتماد</button><button class="btn btn-danger btn-sm" data-reject="${r.id}">رفض</button></div>` : '';
+      let actions = '';
+      if(showActions) actions = `<div class="flex gap8" style="margin-top:10px;"><button class="btn btn-success btn-sm" data-approve="${r.id}">اعتماد</button><button class="btn btn-danger btn-sm" data-reject="${r.id}">رفض</button></div>`;
+      else if(showReopen && r.status==='pending') actions = `<div class="flex gap8" style="margin-top:10px;"><button class="btn btn-outline btn-sm" data-reopen="${r.id}">إلغاء القرار ومراجعة الطلب مرة أخرى</button></div>`;
       return reqCardHtml(r, rev, codeMap, actions);
     }).join('');
     applyRequestHighlight('admin-req-');
@@ -3535,6 +3543,12 @@ async function renderAdminRequestsList(){
           try{ await api.adminReview(b.dataset.reject,'rejected',reason||null); toast('تم الرفض','success'); renderAdminRequestsList(); }
           catch(e){ toast(friendlyError(e),'error'); }
         };
+      });
+    });
+    list.querySelectorAll('[data-reopen]').forEach(b=>b.onclick=()=>{
+      confirmModal('إلغاء قرار المراجعة','سيعود هذا الطلب إلى تبويب "بانتظار المراجعة الإدارية" ليُراجَع من جديد. متابعة؟','إلغاء القرار والمراجعة مرة أخرى', async ()=>{
+        try{ await api.adminReopenReview(b.dataset.reopen); toast('تم إلغاء القرار — الطلب بانتظار المراجعة الآن','success'); renderAdminRequestsList(); }
+        catch(e){ toast(friendlyError(e),'error'); }
       });
     });
   }catch(e){ list.innerHTML = errorBox(e); }
