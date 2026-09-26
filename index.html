@@ -398,6 +398,7 @@ textarea{min-height:110px;}
 
 /* Trust / privacy strip (homepage) */
 .trust-strip{display:grid;gap:10px;margin-top:26px;}
+@media(min-width:700px){ .trust-strip{grid-template-columns:repeat(3,1fr);} }
 .trust-item{display:flex;align-items:flex-start;gap:12px;padding:16px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:16px;}
 .trust-item .trust-icon{flex-shrink:0;width:40px;height:40px;border-radius:12px;background:var(--c-accent-light);color:var(--c-primary-dark);display:grid;place-items:center;font-size:18px;}
 html[data-theme="dark"] .trust-item .trust-icon{color:var(--c-primary);}
@@ -1239,68 +1240,46 @@ function renderBottomNav(){
 ========================================================= */
 function viewLanding(){
   return `<main>
-    <section class="hero-redesign"><div class="wrap hero-grid">
+    <section class="hero-redesign"><div class="wrap" style="text-align:center;max-width:720px;margin:0 auto;">
       <div class="hero-copy">
-        <div class="eyebrow">منصة زواج جاد ومحترم</div>
-        <h1>مودة — تعارف منضبط، وخصوصية في كل خطوة.</h1>
-        <p class="lead">مساحة هادئة للتعرّف على ملفات عامة متاحة، مع فصل واضح بين التصفح العام والعمليات الخاصة بالحساب.</p>
-        <div class="hero-badges"><span class="hero-badge">🔒 خصوصية</span><span class="hero-badge">🛡️ مراجعة إدارية</span><span class="hero-badge">👪 دعم دور الأولياء</span></div>
+        <div class="eyebrow" style="justify-content:center;">منصة زواج جاد ومحترم</div>
+        <h1>مودة</h1>
+        <p class="lead" style="margin-left:auto;margin-right:auto;">نساعد الجادين في الزواج على الوصول إلى الاختيار المناسب، بخطوات واضحة وخصوصية تحفظ الطرفين.</p>
         <div class="hero-actions">
-          <button class="btn btn-primary" data-nav="/register">ابدأ الآن</button>
-          <button class="btn btn-outline" data-nav="/discovery">تصفح المرشحين</button>
+          <button class="btn btn-primary" data-nav="/discovery">استكشف المرشحين</button>
+          <button class="btn btn-outline" data-nav="/register">إنشاء حساب</button>
+        </div>
+        <div class="hero-badges" style="justify-content:center;">
+          <span class="hero-badge">🔒 خصوصية</span><span class="hero-badge">🛡️ مراجعة إدارية</span><span class="hero-badge">🤍 هدف واضح: الزواج</span>
         </div>
       </div>
-      <div class="hero-panel"><div class="panel-mark">💍</div><h3>تصفح قبل التسجيل</h3><p>يمكن للزائر استعراض الملفات العامة التي يسمح بها النظام. أما طلبات الزواج وتعديل الملف والبيانات الخاصة فتتطلب تسجيل الدخول.</p><button class="btn btn-primary btn-block" data-nav="/discovery">استكشاف الملفات العامة</button></div>
     </div></section>
-    ${noticeSectionHtml()}
     <section class="container" style="padding-top:0;padding-bottom:0;">
       <div class="trust-strip">
-        <div class="trust-item"><div class="trust-icon">🔒</div><div><h4>لا تواصل مباشر بين الأعضاء</h4><p>كل طلب زواج يمر أولًا عبر مراجعة إدارية قبل وصوله للطرف الآخر.</p></div></div>
-        <div class="trust-item"><div class="trust-icon">🙈</div><div><h4>لا تُعرض بيانات حساسة للزوار</h4><p>الهاتف والبريد الإلكتروني وأي بيانات خاصة لا تظهر في التصفح العام أبدًا.</p></div></div>
-        <div class="trust-item"><div class="trust-icon">🛡️</div><div><h4>صلاحيات على مستوى قاعدة البيانات</h4><p>الوصول للبيانات الحساسة والإدارة مقيّد بصلاحيات حقيقية، لا بإعدادات واجهة فقط.</p></div></div>
+        <div class="trust-item"><div class="trust-icon">🔒</div><div><h4>الخصوصية</h4><p>بيانات الاتصال لا تظهر للعامة.</p></div></div>
+        <div class="trust-item"><div class="trust-icon">🛡️</div><div><h4>الحماية</h4><p>الطلبات تمر عبر النظام والمراجعة الإدارية.</p></div></div>
+        <div class="trust-item"><div class="trust-icon">🤍</div><div><h4>الجدية</h4><p>المنصة مخصصة للراغبين في الزواج الجاد.</p></div></div>
       </div>
     </section>
     <section class="container">
-      <div class="page-heading"><div><div class="eyebrow">كيف تعمل مودة؟</div><h2>رحلة واضحة من التصفح إلى الطلب</h2></div></div>
+      <div class="page-heading"><div><div class="eyebrow">كيف تبدأ؟</div></div></div>
       <div class="steps-redesign">
-        <div class="step-redesign"><div class="num">01</div><div><h4>استكشف</h4><p>اطّلع على الملفات العامة المتاحة دون كشف بيانات الاتصال أو البيانات الحساسة.</p></div></div>
-        <div class="step-redesign"><div class="num">02</div><div><h4>تعرّف على الملف</h4><p>افتح الملف المرشح وراجع المعلومات التي يسمح بها النظام فقط.</p></div></div>
-        <div class="step-redesign"><div class="num">03</div><div><h4>أنشئ حسابًا عند الحاجة</h4><p>عند استخدام إجراء خاص، تظهر بوابة تسجيل الدخول أو إنشاء الحساب.</p></div></div>
-        <div class="step-redesign"><div class="num">04</div><div><h4>أرسل طلبًا</h4><p>الطلب يمر عبر مسار المراجعة الإدارية الموجود في المنصة.</p></div></div>
+        <div class="step-redesign"><div class="num">01</div><div><h4>استكشف</h4><p>اطّلع على الملفات المتاحة.</p></div></div>
+        <div class="step-redesign"><div class="num">02</div><div><h4>اختر بعناية</h4><p>راجع المعلومات المتاحة عن الملف.</p></div></div>
+        <div class="step-redesign"><div class="num">03</div><div><h4>أرسل طلبًا</h4><p>ابدأ طلب الزواج عبر المسار الرسمي للمنصة.</p></div></div>
       </div>
-      <div class="section-title"><h3>لماذا مودة؟</h3></div>
-      <div class="feature-grid">
-        <div class="feature-block"><h4>الخصوصية أولًا</h4><p>الفصل بين البيانات العامة والبيانات الخاصة مع الاعتماد على صلاحيات النظام.</p></div>
-        <div class="feature-block"><h4>وضوح الإجراءات</h4><p>كل إجراء له مكان واضح وحالة مفهومة بدل ازدحام الأزرار والصفحات.</p></div>
-        <div class="feature-block"><h4>واجهة هادئة</h4><p>تصميم عربي RTL حديث يعمل على الهاتف والكمبيوتر مع الوضع الداكن.</p></div>
-      </div>
-      <div class="section-title"><div><div class="eyebrow">تصفح مباشر</div><h3 class="mt0">استكشف بعض الملفات العامة</h3></div><a style="color:var(--c-primary);font-weight:800;cursor:pointer;font-size:14px;" data-nav="/discovery">عرض الكل ←</a></div>
+      <div class="page-heading" style="margin-top:34px;"><div><div class="eyebrow">مرشحون متاحون</div><h3 class="mt0" style="margin-bottom:0;">اطّلع على الملفات العامة المتاحة</h3></div></div>
       <div id="home-candidates">${loadingBox('جارِ تحميل الملفات العامة…')}</div>
-      <div class="section-title"><div><div class="eyebrow">من مودة إلى بيت وأسرة</div><h3 class="mt0">قصص بدأت من مودة</h3></div></div>
-      <div id="home-stories">${loadingBox('جارِ التحميل…')}</div>
-      <div class="cta-band"><div><h3 style="color:#fff;margin-bottom:3px;">ابدأ من المكان المناسب لك</h3><p>تصفح أولًا أو أنشئ حسابك للانتقال إلى الوظائف الخاصة.</p></div><div class="hero-actions"><button class="btn btn-primary" style="background:#fff;color:var(--c-primary)" data-nav="/register">إنشاء حساب</button><button class="btn btn-outline" data-nav="/discovery">تصفح المرشحين</button></div></div>
-      <div class="section-title"><div><div class="eyebrow">تواصل مباشر</div><h3 class="mt0">لديك سؤال قبل التسجيل؟</h3></div></div>
-      <div class="grid grid-2">
-        <div class="card card-tight" style="text-align:center;">
-          <div style="font-size:30px;margin-bottom:6px;">💬</div>
-          <h4 style="margin:0 0 4px;">واتساب</h4>
-          <p class="mb0">+20 12 77643652</p>
-          <a class="btn btn-primary btn-block" style="margin-top:12px;" href="https://wa.me/201277643652" target="_blank" rel="noopener noreferrer">تواصل عبر واتساب</a>
-        </div>
-        <div class="card card-tight" style="text-align:center;">
-          <div style="font-size:30px;margin-bottom:6px;">📩</div>
-          <h4 style="margin:0 0 4px;">صرّحني</h4>
-          <p class="mb0">أرسل استفسارك أو ملاحظتك مباشرة</p>
-          <a class="btn btn-outline btn-block" style="margin-top:12px;" href="https://49253231613833.sarhne.com" target="_blank" rel="noopener noreferrer">فتح صرّحني</a>
-        </div>
-      </div>
+      <div style="text-align:center;margin-top:16px;"><a class="btn btn-outline" data-nav="/discovery">عرض جميع المرشحين ←</a></div>
+      <div class="cta-band" style="margin-top:40px;"><div><h3 style="color:#fff;margin-bottom:3px;">ابدأ خطوتك الأولى</h3><p>استكشف المرشحين أو أنشئ حسابك للبدء.</p></div><div class="hero-actions"><button class="btn btn-primary" style="background:#fff;color:var(--c-primary)" data-nav="/discovery">استكشف المرشحين</button><button class="btn btn-outline" data-nav="/register">إنشاء حساب</button></div></div>
     </section>
     ${siteFooter()}
   </main>`;
 }
-/* Fills the two async homepage sections (public candidate preview + success stories) after
-   viewLanding()'s HTML is already in the DOM. Never uses mock data: candidates come from the
-   real public RPC, and stories show an honest empty state unless a real, approved table exists. */
+/* Fills the async homepage section (public candidate preview) after viewLanding()'s HTML is
+   already in the DOM. Never uses mock data: candidates come from the real public RPC. The
+   homepage no longer renders a "success stories" placeholder section (removed by design —
+   no invented testimonial content on the public landing page). */
 async function mountLandingExtras(){
   // Rewire every data-nav button/link that just got inserted via viewLanding()'s HTML
   // (hero buttons, CTA band, footer links). renderHeader() only bound data-nav elements
@@ -1321,17 +1300,6 @@ async function mountLandingExtras(){
       // Never surface a raw error box on the public homepage — fail quiet into a neutral prompt instead.
       candBox.innerHTML = `<div class="state-box"><p class="mb0">تصفح الملفات العامة من صفحة الاستكشاف.</p></div>`;
     }
-  }
-  const storyBox = document.getElementById('home-stories');
-  if(storyBox){
-    // No success_stories table/RPC exists yet in this project. Showing an honest, respectful
-    // empty state rather than inventing testimonials — replace this block once a real,
-    // consent-backed data source is wired up (see the build report for details).
-    storyBox.innerHTML = `<div class="story-grid"><div class="story-empty">
-      <div class="icon">🤍</div>
-      <h4 class="mt0">سنشارك هنا قصصًا حقيقية</h4>
-      <p>سنشارك هنا قصصًا حقيقية من أسر بدأت رحلتها عبر مودة، بعد موافقة أصحابها.</p>
-    </div></div>`;
   }
 }
 function siteFooter(){
@@ -3261,7 +3229,18 @@ async function openAdminUserDetail(userId){
           closeModal();
           adminActiveSection = 'chat';
           adminChatActiveThreadId = thread.id;
-          navigate('/admin');
+          // navigate('/admin') is a no-op here: this button only ever appears while already
+          // on the /admin route, so the hash never changes, 'hashchange' never fires, and
+          // render()/mountAdmin() never runs again — the panel switch above silently does
+          // nothing. Since we're already inside the mounted admin page, switch the panel by
+          // hand (same as the sidebar link click handler) and load the new thread directly.
+          if(S.route === '/admin'){
+            document.querySelectorAll('.admin-side-link').forEach(x=>x.classList.toggle('active', x.dataset.sec==='chat'));
+            document.querySelectorAll('.admin-panel').forEach(p=>{ p.hidden = p.dataset.panel!=='chat'; });
+            await renderAdminChatThreads();
+          }else{
+            navigate('/admin');
+          }
         }catch(e){ toast(friendlyError(e),'error'); msgBtn.disabled = false; }
       };
     }
