@@ -367,9 +367,34 @@ textarea{min-height:110px;}
 .admin-nav{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:18px;}
 .admin-group{padding:14px;border:1px solid var(--c-border);border-radius:15px;background:var(--c-surface);}
 .admin-group h4{font-size:13px;color:var(--c-primary);}
+/* Admin sidebar layout — organizes the admin sections into a navigable side menu
+   instead of one long stacked page. Sections' content is all rendered up-front
+   (same data-loading behavior as before); the sidebar only toggles which panel
+   is visible, so nothing about how data is fetched changes. */
+.admin-shell{display:flex; gap:22px; align-items:flex-start; margin-top:10px;}
+.admin-side{flex:0 0 220px; display:flex; flex-direction:column; gap:2px; position:sticky; top:calc(var(--header-h) + 14px);}
+.admin-side-group-label{font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.04em; color:var(--c-text-muted); margin:16px 4px 4px;}
+.admin-side-group-label:first-child{margin-top:0;}
+.admin-side-link{display:flex; align-items:center; gap:8px; padding:10px 14px; border-radius:var(--radius-sm); cursor:pointer; font-weight:700; font-size:14px; color:var(--c-text-muted); white-space:nowrap;}
+.admin-side-link:hover{background:var(--c-surface-2);}
+.admin-side-link.active{background:var(--c-primary); color:#fff;}
+.admin-main{flex:1; min-width:0;}
+.admin-panel[hidden]{display:none;}
+.admin-subtabs{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;}
+.admin-subtab{padding:7px 14px; border-radius:99px; font-size:13px; font-weight:700; cursor:pointer; background:var(--c-surface-2); color:var(--c-text-muted); white-space:nowrap;}
+.admin-subtab.active{background:var(--c-primary); color:#fff;}
+.admin-link{cursor:pointer; color:var(--c-primary); font-weight:700;}
+@media(max-width:860px){
+  .admin-shell{flex-direction:column;}
+  .admin-side{flex-direction:row; overflow-x:auto; position:static; width:100%; gap:6px; padding-bottom:6px;}
+  .admin-side-group-label{display:none;}
+  .admin-side-link{flex:0 0 auto;}
+}
 .coming-soon{border-style:dashed!important;}
 .notification-item{padding:13px 14px;border:1px solid var(--c-border);border-radius:14px;background:var(--c-surface);margin-bottom:8px;}
 .notification-item.unread{border-color:var(--c-accent);background:var(--c-surface-2);}
+@keyframes highlightPulse{0%{box-shadow:0 0 0 0 rgba(255,193,7,.55);}70%{box-shadow:0 0 0 12px rgba(255,193,7,0);}100%{box-shadow:0 0 0 0 rgba(255,193,7,0);}}
+.highlight-pulse{border-color:#ffc107 !important;animation:highlightPulse 1.3s ease-out 2;}
 
 /* Trust / privacy strip (homepage) */
 .trust-strip{display:grid;gap:10px;margin-top:26px;}
@@ -635,7 +660,7 @@ const LABELS = {
   hijab:{none:'بدون حجاب',hijab:'حجاب',niqab:'نقاب',other:'أخرى — اكتب'},
   health_status:{good:'جيدة',fair:'متوسطة',has_condition:'توجد حالة صحية'},
   disability_type:{none:'لا يوجد',physical_mobility:'حركية',visual_impairment:'بصرية',hearing_impairment:'سمعية',chronic_illness:'مرض مزمن',other:'أخرى'},
-  education_level:{below_secondary:'أقل من ثانوي',secondary:'ثانوي',diploma:'دبلوم',bachelor:'بكالوريوس',master:'ماجستير',phd:'دكتوراه'},
+  education_level:{below_secondary:'أقل من ثانوي',secondary:'ثانوي',diploma:'دبلوم',bachelor:'بكالوريوس',master:'ماجستير',phd:'دكتوراه',other:'أخرى — اكتب'},
   work_stability:{stable:'مستقر',unstable:'غير مستقر',seeking_work:'يبحث عن عمل',not_working:'لا يعمل',student:'طالب'},
   marital_status:{single:'أعزب/عزباء',divorced:'مطلّق/ة',widowed:'أرمل/ة',married:'متزوج/ة'},
   housing_status:{owns_housing:'يملك سكن',renting:'إيجار',will_provide_after_marriage:'سيوفر سكن بعد الزواج',living_with_family:'يسكن مع الأهل'},
@@ -884,6 +909,7 @@ const api = {
     if(error) throw error; return data;
   },
   adminListChatThreads(){ return this.rpc('admin_list_chat_threads'); },
+  adminStartChatThread(userId, subject){ return this.rpc('admin_start_chat_thread', {p_user_id:userId, p_subject:subject||null}); },
   async adminSetThreadStatus(threadId, status){
     const {data, error} = await sb.from('chat_threads').update({status, closed_at: status==='closed'?new Date().toISOString():null}).eq('id',threadId).select().single();
     if(error) throw error; return data;
@@ -1782,7 +1808,50 @@ async function mountDashboard(app){
 
 async function mountDashboardNotifications(){
   const box=document.getElementById('dashboard-notifications'); if(!box) return;
-  try{ const rows=await api.getNotifications(8); box.innerHTML=rows.length?rows.map(n=>`<div class="notification-item ${n.read_at?'':'unread'}"><div class="flex-between"><strong>${n.title}</strong><span class="muted" style="font-size:11px;">${new Date(n.created_at).toLocaleString('ar-EG')}</span></div><p class="mb0">${n.message||''}</p>${n.read_at?'':`<button class="btn btn-outline btn-sm" style="margin-top:8px;" data-notif-read="${n.id}">تمت القراءة</button>`}</div>`).join(''):emptyBox('🔔','لا توجد إشعارات جديدة','ستظهر هنا تحديثات الطلبات والتنبيهات.'); box.querySelectorAll('[data-notif-read]').forEach(b=>b.onclick=async()=>{try{await api.markNotificationRead(b.dataset.notifRead);mountDashboardNotifications();}catch(e){toast(friendlyError(e),'error');}}); }catch(e){box.innerHTML=errorBox(e);}
+  try{
+    const rows=await api.getNotifications(8);
+    box.innerHTML=rows.length?rows.map(n=>{
+      const hasTarget = !!n.related_request_id;
+      return `<div class="notification-item ${n.read_at?'':'unread'}" ${hasTarget?`data-notif-open="${n.id}" data-notif-request="${n.related_request_id}" style="cursor:pointer;"`:''}>
+        <div class="flex-between"><strong>${n.title}</strong><span class="muted" style="font-size:11px;">${new Date(n.created_at).toLocaleString('ar-EG')}</span></div>
+        <p class="mb0">${n.message||''}</p>
+        <div class="flex gap8" style="margin-top:8px;flex-wrap:wrap;">
+          ${hasTarget?`<button class="btn btn-outline btn-sm" data-notif-view="${n.id}" data-notif-request="${n.related_request_id}">عرض تفاصيل الطلب</button>`:''}
+          ${n.read_at?'':`<button class="btn btn-ghost btn-sm" data-notif-read="${n.id}">تمت القراءة</button>`}
+        </div>
+      </div>`;
+    }).join(''):emptyBox('🔔','لا توجد إشعارات جديدة','ستظهر هنا تحديثات الطلبات والتنبيهات.');
+    box.querySelectorAll('[data-notif-read]').forEach(b=>b.onclick=async(ev)=>{ev.stopPropagation();try{await api.markNotificationRead(b.dataset.notifRead);mountDashboardNotifications();}catch(e){toast(friendlyError(e),'error');}});
+    box.querySelectorAll('[data-notif-view]').forEach(b=>b.onclick=async(ev)=>{ev.stopPropagation();await openNotificationTarget(b.dataset.notifView, b.dataset.notifRequest);});
+    box.querySelectorAll('[data-notif-open]').forEach(el=>el.onclick=async()=>{await openNotificationTarget(el.dataset.notifOpen, el.dataset.notifRequest);});
+  }catch(e){box.innerHTML=errorBox(e);}
+}
+// Clicking a notification now takes the person straight to the full detail of the
+// marriage request it refers to, instead of just sitting there as inert text.
+// Admins land on the pending-review list (where every field of the request is shown);
+// regular users land on the matching tab of "طلبات الزواج" with their request highlighted.
+async function openNotificationTarget(notifId, requestId){
+  try{ if(notifId) await api.markNotificationRead(notifId); }catch(e){ /* non-fatal */ }
+  if(!requestId){ mountDashboardNotifications(); return; }
+  if(S.isAdmin){
+    highlightRequestId = requestId;
+    navigate('/admin');
+    return;
+  }
+  try{
+    const {data:r} = await sb.from('marriage_requests').select('sender_id,recipient_id').eq('id', requestId).single();
+    if(r) requestsTab = (r.sender_id === S.session.user.id) ? 'sent' : 'received';
+  }catch(e){ /* fall back to current tab */ }
+  highlightRequestId = requestId;
+  navigate('/requests');
+}
+// Scrolls to and briefly highlights the card matching highlightRequestId (if any), then
+// clears it so it doesn't re-trigger on a later, unrelated visit to the same page.
+function applyRequestHighlight(idPrefix){
+  if(!highlightRequestId) return;
+  const el = document.getElementById(idPrefix+highlightRequestId);
+  if(el){ el.scrollIntoView({behavior:'smooth', block:'center'}); el.classList.add('highlight-pulse'); setTimeout(()=>el.classList.remove('highlight-pulse'), 2600); }
+  highlightRequestId = null;
 }
 async function mountDashboardContacts(){
   const box=document.getElementById('dashboard-contacts'); if(!box) return;
@@ -2045,57 +2114,59 @@ function renderAccountForm(panel, p){
 function renderBasicForm(panel, p){
   ensureGeo();
   panel.innerHTML = `
-    <label>الاسم الكامل</label><input type="text" id="pf-full_name" value="${p.full_name||''}">
+    <label>الاسم الكامل *</label><input type="text" id="pf-full_name" value="${p.full_name||''}">
     <div class="row-2">
-      <div><label>الجنس</label><select id="pf-gender"><option value="">اختر</option>${['male','female'].map(v=>`<option value="${v}" ${p.gender===v?'selected':''}>${L('gender',v)}</option>`).join('')}</select></div>
-      <div><label>تاريخ الميلاد</label><input type="date" id="pf-date_of_birth" value="${p.date_of_birth||''}"></div>
+      <div><label>الجنس *</label><select id="pf-gender"><option value="">اختر</option>${['male','female'].map(v=>`<option value="${v}" ${p.gender===v?'selected':''}>${L('gender',v)}</option>`).join('')}</select></div>
+      <div><label>تاريخ الميلاد *</label><input type="date" id="pf-date_of_birth" value="${p.date_of_birth||''}"></div>
     </div>
     <div class="row-2">
-      <div><label>الطول (سم)</label><input type="number" id="pf-height_cm" step="1" min="100" max="250" value="${p.height_cm||''}"></div>
-      <div><label>الوزن (كجم)</label><input type="number" id="pf-weight_kg" step="1" min="30" max="300" value="${p.weight_kg||''}"></div>
+      <div><label>الطول (سم) *</label><input type="number" id="pf-height_cm" step="1" min="100" max="250" value="${p.height_cm||''}"></div>
+      <div><label>الوزن (كجم) *</label><input type="number" id="pf-weight_kg" step="1" min="30" max="300" value="${p.weight_kg||''}"></div>
     </div>
     <div class="row-2">
-      <div><label>البنية الجسدية</label><select id="pf-body_build"><option value="">—</option>${selOpts('body_build',p.body_build)}</select>
+      <div><label>البنية الجسدية *</label><select id="pf-body_build"><option value="">—</option>${selOpts('body_build',p.body_build)}</select>
         ${otherDetailsHtml('pf-body_build','وصف البنية الجسدية',p.body_build,p.body_build_other_details)}
       </div>
-      <div><label>لون البشرة</label><select id="pf-skin_tone"><option value="">—</option>${selOpts('skin_tone',p.skin_tone)}</select>
+      <div><label>لون البشرة *</label><select id="pf-skin_tone"><option value="">—</option>${selOpts('skin_tone',p.skin_tone)}</select>
         ${otherDetailsHtml('pf-skin_tone','وصف لون البشرة',p.skin_tone,p.skin_tone_other_details)}
       </div>
     </div>
     <div class="row-2">
-      <div><label>لون الشعر</label><select id="pf-hair_color"><option value="">—</option>${selOpts('hair_color',p.hair_color)}</select>
+      <div><label>لون الشعر *</label><select id="pf-hair_color"><option value="">—</option>${selOpts('hair_color',p.hair_color)}</select>
         ${otherDetailsHtml('pf-hair_color','وصف لون الشعر',p.hair_color,p.hair_color_other_details)}
       </div>
       <div id="gender-specific-basic"></div>
     </div>
     <div class="row-2">
-      <div><label>المؤهل الدراسي</label><select id="pf-education_level"><option value="">—</option>${selOpts('education_level',p.education_level)}</select></div>
-      <div><label>التخصص</label><input type="text" id="pf-education_major" value="${p.education_major||''}"></div>
+      <div><label>المؤهل الدراسي *</label><select id="pf-education_level"><option value="">— اختر —</option>${selOpts('education_level',p.education_level)}</select>
+        ${otherDetailsHtml('pf-education_level','اكتب المؤهل الدراسي',p.education_level,p.education_level_other_details)}
+      </div>
+      <div><label>التخصص *</label><input type="text" id="pf-education_major" value="${p.education_major||''}"></div>
     </div>
     <div class="row-2">
-      <div><label>المسمى الوظيفي</label><input type="text" id="pf-job_title" value="${p.job_title||''}"></div>
-      <div><label>استقرار العمل</label><select id="pf-work_stability"><option value="">—</option>${selOpts('work_stability',p.work_stability)}</select></div>
+      <div><label>المسمى الوظيفي *</label><input type="text" id="pf-job_title" value="${p.job_title||''}"></div>
+      <div><label>استقرار العمل *</label><select id="pf-work_stability"><option value="">—</option>${selOpts('work_stability',p.work_stability)}</select></div>
     </div>
     <div class="row-2">
-      <div><label>الحالة الاجتماعية</label><select id="pf-marital_status"><option value="">اختر</option>${selOpts('marital_status',p.marital_status)}</select></div>
+      <div><label>الحالة الاجتماعية *</label><select id="pf-marital_status"><option value="">اختر</option>${selOpts('marital_status',p.marital_status)}</select></div>
       <div><label>عدد الأبناء</label><input type="number" step="1" min="0" id="pf-children_count" value="${p.children_count||0}"></div>
     </div>
     <div class="row-2">
-      <div><label>الحالة الصحية</label><select id="pf-health_status">${selOpts('health_status',p.health_status||'good')}</select></div>
+      <div><label>الحالة الصحية *</label><select id="pf-health_status">${selOpts('health_status',p.health_status||'good')}</select></div>
       <div><label>نوع الإعاقة (إن وجدت)</label><select id="pf-disability_type">${selOpts('disability_type',p.disability_type||'none')}</select></div>
     </div>
     <div id="disability-details-wrap" style="display:${p.disability_type&&p.disability_type!=='none'?'block':'none'};">
       <label>تفاصيل الإعاقة</label><textarea id="pf-disability_other_details">${p.disability_other_details||''}</textarea>
     </div>
     <div class="row-2">
-      <div><label>المحافظة</label><select id="pf-governorate_id"><option value="">اختر</option></select></div>
-      <div><label>المدينة/المركز</label><select id="pf-city_id"><option value="">اختر المحافظة أولًا</option></select></div>
+      <div><label>المحافظة *</label><select id="pf-governorate_id"><option value="">اختر</option></select></div>
+      <div><label>المدينة/المركز *</label><select id="pf-city_id"><option value="">اختر المحافظة أولًا</option></select></div>
     </div>
     <div id="pf-village_area-wrap" style="display:none;">
       <label>المنطقة / القرية / النجع <span class="muted" style="font-weight:400;">(اختياري)</span></label>
       <input type="text" id="pf-village_area" maxlength="150" placeholder="اكتب اسم المنطقة أو القرية أو النجع" value="${p.village_area||''}">
     </div>
-    <label>نبذة شخصية</label><textarea id="pf-bio">${p.bio||''}</textarea>
+    <label>نبذة شخصية *</label><textarea id="pf-bio">${p.bio||''}</textarea>
     <button class="btn btn-primary btn-block" id="pf-save" style="margin-top:16px;">حفظ البيانات الأساسية</button>
   `;
   const gWrap = document.getElementById('gender-specific-basic');
@@ -2123,6 +2194,7 @@ function renderBasicForm(panel, p){
   wireOtherReveal('pf-body_build','pf-body_build');
   wireOtherReveal('pf-skin_tone','pf-skin_tone');
   wireOtherReveal('pf-hair_color','pf-hair_color');
+  wireOtherReveal('pf-education_level','pf-education_level');
   // geo
   const govSel = document.getElementById('pf-governorate_id');
   const citySel = document.getElementById('pf-city_id');
@@ -2159,6 +2231,24 @@ function renderBasicForm(panel, p){
       const height_cm = intOrNull('pf-height_cm', 'الطول', 100, 250);
       const weight_kg = intOrNull('pf-weight_kg', 'الوزن', 30, 300);
       const children_count = intOrNull('pf-children_count', 'عدد الأبناء', 0) ?? 0;
+      // All identifying fields are mandatory so admins can reliably match/verify members;
+      // every select still lets the person choose "أخرى — اكتب" or an existing neutral
+      // value (e.g. "لا يوجد" لdisability, "لا يعمل" لwork_stability) so nothing here forces
+      // a false answer — it only forces an explicit one.
+      const requiredChecks = [
+        ['pf-full_name','الاسم الكامل'], ['pf-gender','الجنس'], ['pf-date_of_birth','تاريخ الميلاد'],
+        ['pf-height_cm','الطول'], ['pf-weight_kg','الوزن'], ['pf-body_build','البنية الجسدية'],
+        ['pf-skin_tone','لون البشرة'], ['pf-hair_color','لون الشعر'], ['pf-education_level','المؤهل الدراسي'],
+        ['pf-education_major','التخصص'], ['pf-job_title','المسمى الوظيفي'], ['pf-work_stability','استقرار العمل'],
+        ['pf-marital_status','الحالة الاجتماعية'], ['pf-health_status','الحالة الصحية'],
+        ['pf-governorate_id','المحافظة'], ['pf-city_id','المدينة/المركز'], ['pf-bio','نبذة شخصية']
+      ];
+      for(const [id,label] of requiredChecks){
+        if(!val(id)) throw Object.assign(new Error(`${label}: حقل إجباري، برجاء تعبئته`), {isValidationError:true});
+      }
+      if(val('pf-education_level')==='other' && !val('pf-education_level_other_details')){
+        throw Object.assign(new Error('المؤهل الدراسي: برجاء كتابة المؤهل'), {isValidationError:true});
+      }
       const payload = {
         user_id: S.session.user.id,
         full_name: val('pf-full_name'), gender: val('pf-gender')||null, date_of_birth: val('pf-date_of_birth')||null,
@@ -2170,6 +2260,7 @@ function renderBasicForm(panel, p){
         hair_color: val('pf-hair_color')||null,
         hair_color_other_details: val('pf-hair_color')==='other' ? (val('pf-hair_color_other_details')||null) : null,
         education_level: val('pf-education_level')||null, education_major: val('pf-education_major')||null,
+        education_level_other_details: val('pf-education_level')==='other' ? (val('pf-education_level_other_details')||null) : null,
         job_title: val('pf-job_title')||null, work_stability: val('pf-work_stability')||null,
         marital_status: val('pf-marital_status')||null, children_count,
         health_status: val('pf-health_status'), disability_type: val('pf-disability_type'),
@@ -2239,18 +2330,18 @@ function formatDateTimeAr(iso){
 function renderLifestyleForm(panel, l){
   panel.innerHTML = `
     <div class="row-2">
-      <div><label>الحالة السكنية</label><select id="lf-housing_status"><option value="">—</option>${selOpts('housing_status',l.housing_status)}</select></div>
-      <div><label>نوع السكن</label><select id="lf-housing_type"><option value="">—</option>${selOpts('housing_type',l.housing_type)}</select>
+      <div><label>الحالة السكنية *</label><select id="lf-housing_status"><option value="">— اختر —</option>${selOpts('housing_status',l.housing_status)}</select></div>
+      <div><label>نوع السكن *</label><select id="lf-housing_type"><option value="">— اختر —</option>${selOpts('housing_type',l.housing_type)}</select>
         ${otherDetailsHtml('lf-housing_type','وصف نوع السكن',l.housing_type,l.housing_type_other_details)}
       </div>
     </div>
     <div class="row-2">
-      <div><label>الاستعداد للانتقال</label><select id="lf-relocation_willingness"><option value="">—</option>${selOpts('relocation_willingness',l.relocation_willingness)}</select></div>
-      <div><label>العمل بعد الزواج</label><select id="lf-work_after_marriage"><option value="">—</option>${selOpts('work_after_marriage',l.work_after_marriage)}</select></div>
+      <div><label>الاستعداد للانتقال *</label><select id="lf-relocation_willingness"><option value="">— اختر —</option>${selOpts('relocation_willingness',l.relocation_willingness)}</select></div>
+      <div><label>العمل بعد الزواج *</label><select id="lf-work_after_marriage"><option value="">— اختر —</option>${selOpts('work_after_marriage',l.work_after_marriage)}</select></div>
     </div>
     <div class="row-2">
-      <div><label>الرغبة في الإنجاب</label><select id="lf-childbearing_preference"><option value="">—</option>${selOpts('childbearing_preference',l.childbearing_preference)}</select></div>
-      <div><label>جاهزية بيت الزوجية</label><select id="lf-home_readiness"><option value="">—</option>${selOpts('home_readiness',l.home_readiness)}</select></div>
+      <div><label>الرغبة في الإنجاب *</label><select id="lf-childbearing_preference"><option value="">— اختر —</option>${selOpts('childbearing_preference',l.childbearing_preference)}</select></div>
+      <div><label>جاهزية بيت الزوجية *</label><select id="lf-home_readiness"><option value="">— اختر —</option>${selOpts('home_readiness',l.home_readiness)}</select></div>
     </div>
     <button class="btn btn-primary btn-block" id="lf-save" style="margin-top:16px;">حفظ نمط الحياة</button>
   `;
@@ -2258,6 +2349,8 @@ function renderLifestyleForm(panel, l){
   document.getElementById('lf-save').onclick = async ()=>{
     const btn = document.getElementById('lf-save'); btn.disabled=true; btn.textContent='جارٍ الحفظ…';
     try{
+      const lfLabels = {housing_status:'الحالة السكنية',housing_type:'نوع السكن',relocation_willingness:'الاستعداد للانتقال',work_after_marriage:'العمل بعد الزواج',childbearing_preference:'الرغبة في الإنجاب',home_readiness:'جاهزية بيت الزوجية'};
+      for(const f in lfLabels){ if(!val('lf-'+f)) throw Object.assign(new Error(`${lfLabels[f]}: حقل إجباري، برجاء تعبئته`), {isValidationError:true}); }
       const payload = { user_id: S.session.user.id };
       ['housing_status','housing_type','relocation_willingness','work_after_marriage','childbearing_preference','home_readiness'].forEach(f=>{ payload[f] = val('lf-'+f)||null; });
       payload.housing_type_other_details = val('lf-housing_type')==='other' ? (val('lf-housing_type_other_details')||null) : null;
@@ -2275,12 +2368,14 @@ function renderTraitsForm(panel, t){
   const selected = new Set(t.personality_traits||[]);
   panel.innerHTML = `
     <div class="row-2">
-      <div><label>الالتزام بالصلاة</label><select id="tf-prayer_commitment"><option value="">—</option>${selOpts('commitment',t.prayer_commitment)}</select></div>
-      <div><label>الالتزام بالصيام</label><select id="tf-fasting_commitment"><option value="">—</option>${selOpts('commitment',t.fasting_commitment)}</select></div>
+      <div><label>الالتزام بالصلاة *</label><select id="tf-prayer_commitment"><option value="">— اختر —</option>${selOpts('commitment',t.prayer_commitment)}</select></div>
+      <div><label>الالتزام بالصيام *</label><select id="tf-fasting_commitment"><option value="">— اختر —</option>${selOpts('commitment',t.fasting_commitment)}</select></div>
     </div>
-    <label>التدخين</label><select id="tf-smoking_status">${selOpts('smoking_status',t.smoking_status||'non_smoker')}</select>
+    <label>التدخين *</label><select id="tf-smoking_status">${selOpts('smoking_status',t.smoking_status||'non_smoker')}</select>
     <label>السمات الشخصية (اختر ما ينطبق)</label>
     <div id="traits-chips">${Object.entries(LABELS.personality_trait).map(([v,tx])=>`<span class="chip chip-select ${selected.has(v)?'on':''}" data-v="${v}">${tx}</span>`).join('')}</div>
+    <div class="hint" style="margin-top:6px;">مش لاقي صفتك في القائمة؟ اكتبها هنا (تقدر تفصل بين أكتر من صفة بفاصلة):</div>
+    <input type="text" id="tf-traits_other" placeholder="مثال: مرح، منظم في وقته" value="${t.personality_traits_other||''}">
     <button class="btn btn-primary btn-block" id="tf-save" style="margin-top:16px;">حفظ السمات</button>
   `;
   panel.querySelectorAll('#traits-chips .chip-select').forEach(chip=>{
@@ -2289,13 +2384,16 @@ function renderTraitsForm(panel, t){
   document.getElementById('tf-save').onclick = async ()=>{
     const btn = document.getElementById('tf-save'); btn.disabled=true; btn.textContent='جارٍ الحفظ…';
     try{
+      if(!val('tf-prayer_commitment')) throw Object.assign(new Error('الالتزام بالصلاة: حقل إجباري، برجاء تعبئته'), {isValidationError:true});
+      if(!val('tf-fasting_commitment')) throw Object.assign(new Error('الالتزام بالصيام: حقل إجباري، برجاء تعبئته'), {isValidationError:true});
       const traits = [...panel.querySelectorAll('#traits-chips .chip-select.on')].map(c=>c.dataset.v);
       const payload = {
         user_id: S.session.user.id,
         prayer_commitment: val('tf-prayer_commitment')||null,
         fasting_commitment: val('tf-fasting_commitment')||null,
         smoking_status: val('tf-smoking_status'),
-        personality_traits: traits
+        personality_traits: traits,
+        personality_traits_other: val('tf-traits_other')||null
       };
       const {error} = await sb.from('user_profile_traits').upsert(payload, {onConflict:'user_id'});
       if(error) throw error;
@@ -2662,6 +2760,87 @@ async function mountFavorites(app){
 /* =========================================================
    CANDIDATE PROFILE
 ========================================================= */
+// Renders a "field: value" line only when there's something to show, so the layout never
+// shows empty labels — but ANYTHING the candidate actually filled in is displayed, which
+// is the whole point: previously most of get_candidate_profile_by_id()'s fields were simply
+// never read by this screen, so real registered data (height, weight, skin tone, hair
+// color, hijab/beard, health status, disability, bio, children, housing type, religious
+// commitment, smoking...) was silently dropped even though the backend already sent it.
+function pRow(label, value){
+  if(value===null||value===undefined||value===''||value==='—') return '';
+  return `<p class="mb0"><strong>${label}:</strong> ${value}</p>`;
+}
+function candidateProfileHtml(c){
+  const gov = c.governorate ? c.governorate.name_ar : null;
+  const city = c.city ? c.city.name_ar : null;
+  const location = [gov, city].filter(Boolean).join(' — ');
+  const withOther = (group, val, other) => val ? (val==='other' && other ? `${L(group,val)} (${other})` : L(group,val)) : null;
+  const traits = (c.personality_traits||[]).filter(Boolean);
+  const traitsHtml = traits.length ? traits.map(t=>`<span class="chip">${L('personality_trait',t)}</span>`).join('') : '';
+  const children = (c.children||[]).filter(Boolean);
+  const childrenHtml = children.length ? children.map(ch=>`<span class="chip">${ch.approximate_age!=null?ch.approximate_age+' سنة':'عمر غير محدد'}${ch.lives_with_user===false?' · خارج بيت الحاضن':''}</span>`).join('') : '';
+
+  const basics = [
+    pRow('الحالة الاجتماعية', L('marital_status', c.marital_status)),
+    pRow('المكان', location || null),
+    pRow('المؤهل الدراسي', L('education_level', c.education_level)),
+    pRow('التخصص', c.education_major),
+  ].join('');
+
+  const appearance = [
+    pRow('الطول', c.height_cm!=null ? c.height_cm+' سم' : null),
+    pRow('الوزن', c.weight_kg!=null ? c.weight_kg+' كجم' : null),
+    pRow('بنية الجسم', withOther('body_build', c.body_build, c.body_build_other_details)),
+    pRow('لون البشرة', withOther('skin_tone', c.skin_tone, c.skin_tone_other_details)),
+    pRow('لون الشعر', withOther('hair_color', c.hair_color, c.hair_color_other_details)),
+    c.gender==='male' ? pRow('اللحية', withOther('beard', c.beard, c.beard_other_details)) : '',
+    c.gender==='female' ? pRow('الحجاب', withOther('hijab', c.hijab, c.hijab_other_details)) : '',
+  ].join('');
+
+  const health = [
+    pRow('الحالة الصحية', L('health_status', c.health_status)),
+    pRow('الإعاقة', withOther('disability_type', c.disability_type && c.disability_type!=='none' ? c.disability_type : null, c.disability_other_details)),
+  ].join('');
+
+  const work = [
+    pRow('المسمى الوظيفي', c.job_title),
+    pRow('استقرار العمل', L('work_stability', c.work_stability)),
+  ].join('');
+
+  const family = [
+    pRow('عدد الأطفال', c.children_count!=null ? String(c.children_count) : null),
+  ].join('') + (childrenHtml ? `<div style="margin-top:6px;">${childrenHtml}</div>` : '');
+
+  const lifestyle = [
+    pRow('الحالة السكنية', L('housing_status', c.housing_status)),
+    pRow('نوع السكن', withOther('housing_type', c.housing_type, c.housing_type_other_details)),
+    pRow('الاستعداد للانتقال', L('relocation_willingness', c.relocation_willingness)),
+    pRow('العمل بعد الزواج', L('work_after_marriage', c.work_after_marriage)),
+    pRow('الرغبة في الإنجاب', L('childbearing_preference', c.childbearing_preference)),
+    pRow('جاهزية بيت الزوجية', L('home_readiness', c.home_readiness)),
+  ].join('');
+
+  const commitment = [
+    pRow('الالتزام بالصلاة', L('commitment', c.prayer_commitment)),
+    pRow('الالتزام بالصيام', L('commitment', c.fasting_commitment)),
+    pRow('التدخين', L('smoking_status', c.smoking_status)),
+  ].join('');
+
+  const section = (title, body) => body ? `<div class="profile-section"><h3>${title}</h3>${body}</div>` : '';
+
+  return `
+    <div class="profile-section" style="margin-top:12px;"><div class="cand-summary">${avatarPhotoHtml(c.avatar_id,58,'cand-avatar')}<div><div class="eyebrow">ملف مرشح</div><h2>${c.age??'—'} سنة</h2><span class="badge badge-muted">${L('gender',c.gender)}</span></div></div></div>
+    ${section('البيانات الأساسية', basics)}
+    ${c.bio ? section('نبذة شخصية', `<p class="mb0">${c.bio}</p>`) : ''}
+    ${section('المظهر', appearance)}
+    ${section('الحالة الصحية', health)}
+    ${section('التعليم والعمل', work)}
+    ${(c.children_count!=null && c.children_count>0) ? section('الأطفال', family) : ''}
+    ${section('السكن ونمط الحياة', lifestyle)}
+    ${section('الالتزام الديني والعادات', commitment)}
+    ${traitsHtml ? section('الصفات الشخصية', `<div>${traitsHtml}</div>`) : ''}
+  `;
+}
 async function mountCandidate(app, id){
   app.innerHTML=loadingBox('جارِ تحميل الملف…');
   try{
@@ -2669,17 +2848,11 @@ async function mountCandidate(app, id){
     // switches to the public RPC when no valid session exists.
     const c = await api.getCandidateById(id);
     if(!c){app.innerHTML=emptyBox('🚫','هذا الملف غير متاح','قد يكون غير مكتمل أو غير متاح وفق صلاحيات النظام.');return;}
-    const gov=c.governorate?c.governorate.name_ar:'غير محدد';
-    const traits=(c.personality_traits||[]).map(t=>`<span class="chip">${L('personality_trait',t)}</span>`).join('')||'<span class="muted">لا يوجد</span>';
     app.innerHTML=`<div class="container narrow">
       <button class="btn btn-ghost btn-sm" data-back>→ رجوع للاستكشاف</button>
-      <div class="profile-section" style="margin-top:12px;"><div class="cand-summary">${avatarPhotoHtml(c.avatar_id,58,'cand-avatar')}<div><div class="eyebrow">ملف مرشح</div><h2>${c.age??'—'} سنة</h2><span class="badge badge-muted">${L('gender',c.gender)}</span></div></div>
-      <div class="profile-section"><h3>البيانات الأساسية</h3><p><strong>الحالة الاجتماعية:</strong> ${L('marital_status',c.marital_status)}</p><p><strong>المحافظة:</strong> ${gov}</p><p><strong>المؤهل الدراسي:</strong> ${L('education_level',c.education_level)}</p></div>
-      <div class="profile-section"><h3>التعليم والعمل</h3><p><strong>استقرار العمل:</strong> ${L('work_stability',c.work_stability)}</p></div>
-      <div class="profile-section"><h3>السكن ونمط الحياة</h3><p><strong>الحالة السكنية:</strong> ${L('housing_status',c.housing_status)}</p><p><strong>الاستعداد للانتقال:</strong> ${L('relocation_willingness',c.relocation_willingness)}</p></div>
-      <div class="profile-section"><h3>الصفات</h3><div>${traits}</div></div>
+      ${candidateProfileHtml(c)}
       <div class="gate-box" style="margin-top:14px;"><strong>التواصل يتم عبر طلب الزواج</strong><p>لا تُعرض بيانات الاتصال المباشر من خلال هذا الملف.</p><div class="flex gap8" style="justify-content:center;flex-wrap:wrap;"><button class="btn btn-primary" id="send-request">طلب الزواج</button>${favoriteButtonHtml(id)}<button class="btn btn-outline" id="report-user">إبلاغ عن هذا الملف</button></div></div>
-      </div></div>`;
+      </div>`;
     document.querySelector('[data-back]').onclick=()=>navigate('/discovery');
     await ensureFavoritesLoaded();
     wireFavButtons(app);
@@ -2735,6 +2908,7 @@ async function mountMatches(app){
    MARRIAGE REQUESTS
 ========================================================= */
 let requestsTab = 'sent';
+let highlightRequestId = null; // set by openNotificationTarget(), consumed by applyRequestHighlight()
 async function mountRequests(app){
   app.innerHTML = `<div class="container">
     <div class="page-heading"><div><div class="eyebrow">المتابعة</div><h2>طلبات الزواج</h2><p class="mb0">تابع الطلبات المرسلة والواردة والحالة الفعلية لكل طلب.</p></div></div>
@@ -2749,6 +2923,7 @@ async function mountRequests(app){
   try{
     if(requestsTab==='sent') await renderSentRequests(panel);
     else await renderReceivedRequests(panel);
+    applyRequestHighlight('req-');
   }catch(e){ panel.innerHTML = errorBox(e); }
 }
 async function renderSentRequests(panel){
@@ -2761,7 +2936,7 @@ async function renderSentRequests(panel){
   panel.innerHTML = data.map((r,i)=>{
     const rev = reviewMap[r.id]; const st=states[i]; const mine=st&&st.mine?st.mine.decision:null;
     const approved=rev&&rev.decision==='approved';
-    return `<div class="card card-tight" style="margin-bottom:10px;">
+    return `<div class="card card-tight" id="req-${r.id}" style="margin-bottom:10px;">
       <div class="flex-between"><span class="badge ${statusBadgeClass(r.status)}">${L('request_status',r.status)}</span><span class="muted" style="font-size:12px;">${new Date(r.created_at).toLocaleDateString('ar-EG')}</span></div>
       <p class="mb0" style="margin-top:6px;">حالة المراجعة الإدارية: <strong>${rev? L('review_decision',rev.decision):'—'}</strong>${rev&&rev.reason?` — السبب: ${rev.reason}`:''}</p>
       ${approved?`<p class="mb0" style="margin-top:6px;">موافقتك: <strong>${mine==='accepted'?'موافق':mine==='rejected'?'رافض':'لم تُسجّل بعد'}</strong>${st&&st.mutual_acceptance?' · <span class="badge badge-success">قبول متبادل</span>':''}</p>`:''}
@@ -2792,7 +2967,7 @@ async function renderReceivedRequests(panel){
   if(error) throw error;
   if(!data.length){ panel.innerHTML = emptyBox('📭','لا توجد طلبات واردة معتمدة حاليًا','تظهر الطلبات هنا فقط بعد موافقة إدارة المنصة عليها.'); return; }
   const states = await Promise.all(data.map(r=>api.getAcceptanceState(r.id).catch(()=>null)));
-  panel.innerHTML = data.map((r,i)=>{const st=states[i]; const mine=st&&st.mine?st.mine.decision:null; return `<div class="card card-tight" style="margin-bottom:10px;">
+  panel.innerHTML = data.map((r,i)=>{const st=states[i]; const mine=st&&st.mine?st.mine.decision:null; return `<div class="card card-tight" id="req-${r.id}" style="margin-bottom:10px;">
       <div class="flex-between"><span class="badge ${statusBadgeClass(r.status)}">${L('request_status',r.status)}</span><span class="muted" style="font-size:12px;">${new Date(r.created_at).toLocaleDateString('ar-EG')}</span></div>
       ${st&&st.mutual_acceptance?`<p class="mb0" style="margin-top:6px;"><span class="badge badge-success">قبول متبادل</span></p>`:mine?`<p class="mb0" style="margin-top:6px;">موافقتك: <strong>${mine==='accepted'?'موافق':'رافض'}</strong></p>`:''}
       <div class="flex gap8" style="margin-top:10px;"><button class="btn btn-outline btn-sm" data-view="${r.sender_id}">عرض الملف</button>${r.status==='pending'?`<button class="btn btn-success btn-sm" data-accept="${r.id}">قبول</button><button class="btn btn-danger btn-sm" data-decline="${r.id}">رفض</button>`:''}</div>
@@ -2866,6 +3041,24 @@ function openGuardianModal(existing){
 /* =========================================================
    ADMIN
 ========================================================= */
+// Which admin sections this admin can see, grouped exactly like the previous
+// Management/Safety/Contact/Audit labels — now real sidebar entries instead of
+// static description cards. Visibility rules are unchanged from before (same
+// S.adminPerms checks); only the layout changed.
+function adminSectionsConfig(){
+  const canManageAdmins = !!S.adminPerms['admins.manage'];
+  return [
+    {key:'requests', label:'طلبات الزواج', group:'الإدارة', icon:'💌', visible:true},
+    {key:'users', label:'المستخدمون', group:'الإدارة', icon:'👥', visible:!!S.adminPerms['users.view']},
+    {key:'chat', label:'محادثات الأعضاء', group:'الإدارة', icon:'💬', visible:!!S.adminPerms['messages.moderate']},
+    {key:'admins', label:'الأدمن والصلاحيات', group:'الإدارة', icon:'🛡️', visible:canManageAdmins},
+    {key:'complaints', label:'بلاغات المستخدمين', group:'السلامة', icon:'🚩', visible:true},
+    {key:'warnings', label:'التنبيهات الإدارية', group:'السلامة', icon:'⚠️', visible:true},
+    {key:'disclosures', label:'كشف بيانات الاتصال', group:'التواصل', icon:'🔒', visible:true},
+    {key:'audit', label:'سجل التدقيق', group:'التدقيق', icon:'📜', visible:true},
+  ].filter(s=>s.visible);
+}
+let adminActiveSection = null;
 async function mountAdmin(app){
   if(!S.isAdmin){app.innerHTML=`<div class="container">${emptyBox('🚫','غير مصرح','هذه الصفحة مخصصة لمسؤولي المنصة فقط.')}</div>`;return;}
   // Visibility follows the real permission system (has_admin_permission('admins.manage'),
@@ -2875,22 +3068,62 @@ async function mountAdmin(app){
   // matching what the backend already allows. superAdmin is only used below to decide
   // whether to additionally show the SUPER_ADMIN protection note.
   const canManageAdmins = !!S.adminPerms['admins.manage'];
+  const sections = adminSectionsConfig();
+  if(!adminActiveSection || !sections.find(s=>s.key===adminActiveSection)) adminActiveSection = sections[0].key;
+  const groups = [...new Set(sections.map(s=>s.group))];
+  const sideHtml = groups.map(g=>`
+    <div class="admin-side-group-label">${g}</div>
+    ${sections.filter(s=>s.group===g).map(s=>`<div class="admin-side-link ${adminActiveSection===s.key?'active':''}" data-sec="${s.key}">${s.icon} ${s.label}</div>`).join('')}
+  `).join('');
   app.innerHTML=`<div class="container">
     <div class="page-heading"><div><div class="eyebrow">Administration</div><h2>لوحة الإدارة</h2><p class="mb0">إدارة الطلبات والسلامة والبلاغات والتنبيهات والصلاحيات.</p></div></div>
-    <div class="admin-nav"><div class="admin-group"><h4>Management</h4><p class="mb0">طلبات الزواج والمستخدمون.</p></div><div class="admin-group"><h4>Safety</h4><p class="mb0">البلاغات والتنبيهات والإيقاف.</p></div><div class="admin-group"><h4>Contact</h4><p class="mb0">مراجعة كشف بيانات الاتصال بعد القبول المتبادل.</p></div><div class="admin-group"><h4>Audit</h4><p class="mb0">التغييرات الحساسة تسجل في سجل التدقيق الموجود.</p></div></div>
-    <div class="section-title"><h3>طلبات الزواج بانتظار المراجعة</h3></div><div id="admin-req-list">${loadingBox()}</div>
-    ${S.adminPerms['users.view'] ? `<div class="section-title"><h3>الحسابات — Member Code ↔ Account ↔ Auth</h3></div><div class="card card-tight" style="margin-bottom:10px;"><p class="mb0 muted" style="font-size:12.5px;">لكل عضو: كود العضو، معرّف الحساب الداخلي (user_accounts.id)، وحساب الدخول المرتبط (بريد عادي أو Google) — دون كشف الهاتف. للاطلاع على الهاتف استخدم صلاحية phone.view من داخل الطلبات/الشكاوى ذات الصلة.</p><div class="flex gap8" style="margin-top:10px;"><input type="text" id="aa-filter" placeholder="فلترة بكود العضو أو البريد…" style="flex:1;"></div></div><div id="admin-all-accounts">${loadingBox()}</div>` : ''}
-    ${S.adminPerms['messages.moderate'] ? `<div class="section-title"><h3>محادثات الأعضاء</h3></div><div class="grid grid-2"><div id="admin-chat-thread-list">${loadingBox()}</div><div id="admin-chat-messages-panel" class="card"><p class="muted">اختر محادثة من القائمة.</p></div></div>` : ''}
-    ${canManageAdmins ? `<div class="section-title"><h3>إضافة أدمن / أدمن مساعد</h3></div><div class="card"><div class="flex-between"><h4 class="mb0">ابحث بـ Member Code أو حساب Google / البريد الإلكتروني</h4></div><p class="mb0 muted" style="font-size:12.5px;margin-top:4px;">مخصص لإسناد أحد الأدوار التالية لحساب موجود بالفعل: ADMIN، MODERATOR، VERIFICATION_ADMIN، SUPPORT_ADMIN. لا يمكن من هنا منح أو تعديل SUPER_ADMIN.</p><div class="flex gap8" style="margin-top:10px;"><input type="text" id="am-search" placeholder="MW-.... أو example@gmail.com" style="flex:1;"><button class="btn btn-outline btn-sm" id="am-search-btn">بحث</button></div><div id="am-search-results" style="margin-top:12px;"></div></div><div class="section-title"><h3>المشرفون الحاليون</h3></div><div id="am-admins-list">${loadingBox()}</div>`:''}
-    <div class="section-title"><h3>بلاغات المستخدمين</h3></div><div id="admin-complaints">${loadingBox()}</div>
-    <div class="section-title"><h3>التنبيهات الإدارية</h3></div><div id="admin-warnings">${loadingBox()}</div>
-    <div class="section-title"><h3>طلبات كشف بيانات الاتصال</h3></div><div id="admin-disclosures">${loadingBox()}</div>
+    <div class="admin-shell">
+      <div class="admin-side">${sideHtml}</div>
+      <div class="admin-main">
+        <div class="admin-panel" data-panel="requests" ${adminActiveSection!=='requests'?'hidden':''}>
+          <div class="section-title"><h3>طلبات الزواج</h3></div>
+          <div id="admin-req-container">${loadingBox()}</div>
+        </div>
+        ${S.adminPerms['users.view'] ? `<div class="admin-panel" data-panel="users" ${adminActiveSection!=='users'?'hidden':''}>
+          <div class="section-title"><h3>المستخدمون — كل من سجّل على المنصة</h3></div>
+          <div class="card card-tight" style="margin-bottom:10px;"><p class="mb0 muted" style="font-size:12.5px;">لكل عضو: كود العضو، معرّف الحساب الداخلي (user_accounts.id)، وحساب الدخول المرتبط (بريد عادي أو Google) — دون كشف الهاتف. للاطلاع على الهاتف استخدم صلاحية phone.view من داخل الطلبات/الشكاوى ذات الصلة.</p><div class="flex gap8" style="margin-top:10px;"><input type="text" id="aa-filter" placeholder="فلترة بكود العضو أو البريد أو الاسم…" style="flex:1;"></div></div>
+          <div id="admin-all-accounts">${loadingBox()}</div>
+        </div>` : ''}
+        ${S.adminPerms['messages.moderate'] ? `<div class="admin-panel" data-panel="chat" ${adminActiveSection!=='chat'?'hidden':''}>
+          <div class="section-title"><h3>محادثات الأعضاء</h3></div>
+          <div class="grid grid-2"><div id="admin-chat-thread-list">${loadingBox()}</div><div id="admin-chat-messages-panel" class="card"><p class="muted">اختر محادثة من القائمة.</p></div></div>
+        </div>` : ''}
+        ${canManageAdmins ? `<div class="admin-panel" data-panel="admins" ${adminActiveSection!=='admins'?'hidden':''}>
+          <div class="section-title"><h3>إضافة أدمن / أدمن مساعد</h3></div>
+          <div class="card"><div class="flex-between"><h4 class="mb0">ابحث بـ Member Code أو حساب Google / البريد الإلكتروني</h4></div><p class="mb0 muted" style="font-size:12.5px;margin-top:4px;">مخصص لإسناد أحد الأدوار التالية لحساب موجود بالفعل: ADMIN، MODERATOR، VERIFICATION_ADMIN، SUPPORT_ADMIN. لا يمكن من هنا منح أو تعديل SUPER_ADMIN.</p><div class="flex gap8" style="margin-top:10px;"><input type="text" id="am-search" placeholder="MW-.... أو example@gmail.com" style="flex:1;"><button class="btn btn-outline btn-sm" id="am-search-btn">بحث</button></div><div id="am-search-results" style="margin-top:12px;"></div></div>
+          <div class="section-title"><h3>المشرفون الحاليون</h3></div><div id="am-admins-list">${loadingBox()}</div>
+        </div>` : ''}
+        <div class="admin-panel" data-panel="complaints" ${adminActiveSection!=='complaints'?'hidden':''}>
+          <div class="section-title"><h3>بلاغات المستخدمين</h3></div><div id="admin-complaints">${loadingBox()}</div>
+        </div>
+        <div class="admin-panel" data-panel="warnings" ${adminActiveSection!=='warnings'?'hidden':''}>
+          <div class="section-title"><h3>التنبيهات الإدارية</h3></div><div id="admin-warnings">${loadingBox()}</div>
+        </div>
+        <div class="admin-panel" data-panel="disclosures" ${adminActiveSection!=='disclosures'?'hidden':''}>
+          <div class="section-title"><h3>طلبات كشف بيانات الاتصال</h3></div><div id="admin-disclosures">${loadingBox()}</div>
+        </div>
+        <div class="admin-panel" data-panel="audit" ${adminActiveSection!=='audit'?'hidden':''}>
+          <div class="section-title"><h3>سجل التدقيق</h3></div><div id="admin-audit-log">${loadingBox()}</div>
+        </div>
+      </div>
+    </div>
   </div>`;
-  await renderAdminRequests();
+  document.querySelectorAll('.admin-side-link').forEach(el=>el.onclick=()=>{
+    adminActiveSection = el.dataset.sec;
+    document.querySelectorAll('.admin-side-link').forEach(x=>x.classList.toggle('active', x.dataset.sec===adminActiveSection));
+    document.querySelectorAll('.admin-panel').forEach(p=>{ p.hidden = p.dataset.panel!==adminActiveSection; });
+  });
+  await renderAdminRequestsPanel();
   if(S.adminPerms['users.view']) await renderAdminAllAccounts();
   if(S.adminPerms['messages.moderate']) await renderAdminChatThreads();
   if(canManageAdmins){ mountAdminManagement(); await renderAdminsList(); }
   await renderAdminComplaints(); await renderAdminWarnings(); await renderAdminDisclosures();
+  await renderAdminAuditLog();
 }
 
 let adminAllAccountsCache = null;
@@ -2934,6 +3167,15 @@ async function renderAdminAllAccounts(){
 // the existing L()/LABELS enum-label mapping, avatarPhotoHtml(), formatDateTimeAr() and
 // openModal() instead of building a separate profile system. Phone is only shown when the
 // RPC itself returned it (gated server-side on the phone.view admin permission).
+function ageFromDob(dob){
+  if(!dob) return null;
+  const b = new Date(dob); if(isNaN(b)) return null;
+  const now = new Date();
+  let age = now.getFullYear() - b.getFullYear();
+  const m = now.getMonth() - b.getMonth();
+  if(m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+  return age;
+}
 async function openAdminUserDetail(userId){
   openModal(`<h3>ملف العضو</h3><div id="admin-user-detail-body">${loadingBox()}</div>`, ()=>{});
   try{
@@ -2949,9 +3191,12 @@ async function openAdminUserDetail(userId){
     const authLine = acc.google_email ? `Google: ${acc.google_email}` : (acc.email ? `Email: ${acc.email}` : '—');
     const locationParts = [d.governorate&&d.governorate.name_ar, d.city&&d.city.name_ar, d.district&&d.district.name_ar, p.village_area].filter(Boolean);
     const body = `
-      <div class="flex gap8" style="align-items:center;margin-bottom:10px;">
-        ${avatarPhotoHtml(p.avatar_id, 58)}
-        <div><h4 class="mb0">${p.full_name||'—'}</h4><p class="mb0 muted" style="font-size:12px;">${acc.member_code||'—'}</p></div>
+      <div class="flex-between" style="align-items:center;margin-bottom:10px;">
+        <div class="flex gap8" style="align-items:center;">
+          ${avatarPhotoHtml(p.avatar_id, 58)}
+          <div><h4 class="mb0">${p.full_name||'—'}</h4><p class="mb0 muted" style="font-size:12px;">${acc.member_code||'—'}</p></div>
+        </div>
+        ${S.adminPerms['messages.moderate'] ? `<button class="btn btn-outline btn-sm" id="aud-message-btn">💬 مراسلة العضو</button>` : ''}
       </div>
       <div class="section-title" style="margin-top:4px;"><h4 class="mb0">الحساب</h4></div>
       ${row('Member Code', acc.member_code)}
@@ -2962,7 +3207,7 @@ async function openAdminUserDetail(userId){
       ${acc.phone_visible ? row('الهاتف', acc.phone_e164 || '— غير مُسجَّل —') : `<p class="mb0 muted" style="font-size:12px;">الهاتف مخفي — يتطلب صلاحية phone.view.</p>`}
       <div class="section-title" style="margin-top:12px;"><h4 class="mb0">البيانات الأساسية</h4></div>
       ${row('الجنس', L('gender', p.gender))}
-      ${row('تاريخ الميلاد', p.date_of_birth)}
+      ${row('تاريخ الميلاد', p.date_of_birth ? `${p.date_of_birth}${ageFromDob(p.date_of_birth)!=null?` (${ageFromDob(p.date_of_birth)} سنة)`:''}` : null)}
       ${row('الحالة الاجتماعية', L('marital_status', p.marital_status))}
       ${row('الطول', p.height_cm!=null?`${p.height_cm} سم`:null)}
       ${row('الوزن', p.weight_kg!=null?`${p.weight_kg} كجم`:null)}
@@ -2976,7 +3221,7 @@ async function openAdminUserDetail(userId){
       <div class="section-title" style="margin-top:12px;"><h4 class="mb0">الموقع</h4></div>
       ${row('المحافظة/المركز/المنطقة', locationParts.length?locationParts.join(' — '):null)}
       <div class="section-title" style="margin-top:12px;"><h4 class="mb0">التعليم والعمل</h4></div>
-      ${row('المؤهل', L('education_level', p.education_level))}
+      ${row('المؤهل', p.education_level==='other' ? (L('education_level','other')+(p.education_level_other_details?` — ${p.education_level_other_details}`:'')) : L('education_level', p.education_level))}
       ${row('التخصص', p.education_major)}
       ${row('الوظيفة', p.job_title)}
       ${row('استقرار العمل', L('work_stability', p.work_stability))}
@@ -2991,7 +3236,7 @@ async function openAdminUserDetail(userId){
       ${row('الصلاة', L('commitment', t.prayer_commitment))}
       ${row('الصيام', L('commitment', t.fasting_commitment))}
       ${row('التدخين', L('smoking_status', t.smoking_status))}
-      ${row('السمات الشخصية', (t.personality_traits&&t.personality_traits.length) ? t.personality_traits.map(x=>L('personality_trait',x)).join('، ') : null)}
+      ${row('السمات الشخصية', [ (t.personality_traits&&t.personality_traits.length) ? t.personality_traits.map(x=>L('personality_trait',x)).join('، ') : null, t.personality_traits_other||null ].filter(Boolean).join(' — ') || null)}
       <div class="section-title" style="margin-top:12px;"><h4 class="mb0">الأبناء</h4></div>
       ${row('عدد الأبناء', p.children_count)}
       ${children.length ? children.map(c=>`<p class="mb0">— عمر تقريبي: ${c.approximate_age??'—'} · ${c.lives_with_user?'يعيش مع المستخدم':'لا يعيش مع المستخدم'}</p>`).join('') : ''}
@@ -3008,11 +3253,35 @@ async function openAdminUserDetail(userId){
       target.innerHTML = body;
       const closeBtn = document.getElementById('aud-close');
       if(closeBtn) closeBtn.onclick = closeModal;
+      const msgBtn = document.getElementById('aud-message-btn');
+      if(msgBtn) msgBtn.onclick = async ()=>{
+        msgBtn.disabled = true;
+        try{
+          const thread = await api.adminStartChatThread(acc.user_id, `مراسلة من الإدارة — ${acc.member_code||''}`);
+          closeModal();
+          adminActiveSection = 'chat';
+          adminChatActiveThreadId = thread.id;
+          navigate('/admin');
+        }catch(e){ toast(friendlyError(e),'error'); msgBtn.disabled = false; }
+      };
     }
   }catch(e){
     const target = document.getElementById('admin-user-detail-body');
     if(target) target.innerHTML = errorBox(e);
   }
+}
+
+// Same detail modal as openAdminUserDetail(), but starting from a Member Code —
+// used wherever a list only has member_code (complaints, warnings, disclosures,
+// chat threads, audit log) instead of the account UUID.
+async function openAdminUserDetailByCode(code){
+  if(!code) return;
+  try{
+    if(!adminAllAccountsCache) adminAllAccountsCache = await api.adminListAllAccounts();
+    const row = adminAllAccountsCache.find(a=>a.member_code===code);
+    if(!row){ toast('تعذر العثور على هذا الحساب','error'); return; }
+    openAdminUserDetail(row.account_id);
+  }catch(e){ toast(friendlyError(e),'error'); }
 }
 
 let adminChatActiveThreadId = null;
@@ -3049,7 +3318,7 @@ async function renderAdminChatMessagesPanel(thread){
   try{ messages = await api.chatMessages(thread.thread_id); }catch(e){ panel.innerHTML = errorBox(e); return; }
   const uid = S.session.user.id;
   panel.innerHTML = `
-    <div class="flex-between"><strong>${thread.full_name||thread.member_code}</strong>${chatStatusBadge(thread.status)}</div>
+    <div class="flex-between"><strong class="admin-link" data-open-code="${thread.member_code}">${thread.full_name||thread.member_code}</strong>${chatStatusBadge(thread.status)}</div>
     <div class="chat-messages" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-top:10px;">
       ${messages.map(m=>`<div class="card card-tight" style="align-self:${m.sender_id===uid?'flex-end':'flex-start'};max-width:85%;background:${m.sender_id===uid?'var(--c-primary)':'var(--c-surface-2)'};color:${m.sender_id===uid?'#fff':'var(--c-text)'};">
         <p class="mb0" style="color:inherit;">${(m.body||'').replace(/</g,'&lt;')}</p>
@@ -3061,6 +3330,8 @@ async function renderAdminChatMessagesPanel(thread){
         ? `<button class="btn btn-outline btn-sm" id="admin-chat-reopen">إعادة فتح المحادثة</button>`
         : `<textarea id="admin-chat-reply-body" style="flex:1;min-height:50px;" placeholder="اكتب ردك…"></textarea><button class="btn btn-primary" id="admin-chat-reply-send">إرسال</button><button class="btn btn-danger btn-sm" id="admin-chat-close">إغلاق</button>`}
     </div>`;
+  const nameLink = document.querySelector('#admin-chat-messages-panel [data-open-code]');
+  if(nameLink) nameLink.onclick = ()=>openAdminUserDetailByCode(nameLink.dataset.openCode);
   const sendBtn = document.getElementById('admin-chat-reply-send');
   if(sendBtn) sendBtn.onclick = async ()=>{
     const body = val('admin-chat-reply-body');
@@ -3086,15 +3357,15 @@ async function renderAdminChatMessagesPanel(thread){
 
 async function renderAdminComplaints(){
   const box=document.getElementById('admin-complaints'); if(!box) return;
-  try{const rows=await api.adminGetComplaints(); if(!rows.length){box.innerHTML=emptyBox('🛡️','لا توجد شكاوى','لا توجد شكاوى مسجلة حاليًا.');return;} box.innerHTML=rows.map(c=>`<div class="card card-tight" style="margin-bottom:8px;"><div class="flex-between"><strong>${c.reason}</strong><span class="badge badge-muted">${c.status}</span></div><p class="mb0">المشتكي: ${c.complainant_member_code} · المستهدف: ${c.target_member_code}</p><p class="mb0">${c.details||''}</p><div class="flex gap8" style="margin-top:8px;"><button class="btn btn-outline btn-sm" data-cstatus="${c.id}" data-status="under_review">قيد المراجعة</button><button class="btn btn-success btn-sm" data-cstatus="${c.id}" data-status="resolved">حل</button><button class="btn btn-danger btn-sm" data-cstatus="${c.id}" data-status="dismissed">رفض</button></div></div>`).join(''); box.querySelectorAll('[data-cstatus]').forEach(b=>b.onclick=async()=>{try{await api.adminUpdateComplaint(b.dataset.cstatus,b.dataset.status,null,null);toast('تم تحديث الشكوى','success');renderAdminComplaints();}catch(e){toast(friendlyError(e),'error');}});}catch(e){box.innerHTML=errorBox(e);}
+  try{const rows=await api.adminGetComplaints(); if(!rows.length){box.innerHTML=emptyBox('🛡️','لا توجد شكاوى','لا توجد شكاوى مسجلة حاليًا.');return;} box.innerHTML=rows.map(c=>`<div class="card card-tight" style="margin-bottom:8px;"><div class="flex-between"><strong>${c.reason}</strong><span class="badge badge-muted">${c.status}</span></div><p class="mb0">المشتكي: <span class="admin-link" data-open-code="${c.complainant_member_code}">${c.complainant_member_code}</span> · المستهدف: <span class="admin-link" data-open-code="${c.target_member_code}">${c.target_member_code}</span></p><p class="mb0">${c.details||''}</p><div class="flex gap8" style="margin-top:8px;"><button class="btn btn-outline btn-sm" data-cstatus="${c.id}" data-status="under_review">قيد المراجعة</button><button class="btn btn-success btn-sm" data-cstatus="${c.id}" data-status="resolved">حل</button><button class="btn btn-danger btn-sm" data-cstatus="${c.id}" data-status="dismissed">رفض</button></div></div>`).join(''); box.querySelectorAll('[data-open-code]').forEach(el=>el.onclick=()=>openAdminUserDetailByCode(el.dataset.openCode)); box.querySelectorAll('[data-cstatus]').forEach(b=>b.onclick=async()=>{try{await api.adminUpdateComplaint(b.dataset.cstatus,b.dataset.status,null,null);toast('تم تحديث الشكوى','success');renderAdminComplaints();}catch(e){toast(friendlyError(e),'error');}});}catch(e){box.innerHTML=errorBox(e);}
 }
 async function renderAdminWarnings(){
   const box=document.getElementById('admin-warnings'); if(!box) return;
-  try{const rows=await api.adminGetWarnings(); if(!rows.length){box.innerHTML=emptyBox('⚠️','لا توجد تنبيهات','لا توجد تنبيهات مسجلة حاليًا.');return;} box.innerHTML=rows.map(w=>`<div class="card card-tight" style="margin-bottom:8px;"><div class="flex-between"><strong>${w.target_member_code}</strong><span class="badge ${w.status==='confirmed'?'badge-danger':'badge-warn'}">${w.status}</span></div><p class="mb0">${w.reason}</p><div class="flex gap8" style="margin-top:8px;">${w.status==='issued'?`<button class="btn btn-danger btn-sm" data-wconfirm="${w.id}">تأكيد التنبيه</button>`:''}${w.status==='confirmed'?`<button class="btn btn-outline btn-sm" data-wrevoke="${w.id}">إلغاء التنبيه</button>`:''}</div></div>`).join(''); box.querySelectorAll('[data-wconfirm]').forEach(b=>b.onclick=async()=>{try{await api.adminSetWarningStatus(b.dataset.wconfirm,'confirmed');toast('تم تأكيد التنبيه','success');renderAdminWarnings();}catch(e){toast(friendlyError(e),'error');}});box.querySelectorAll('[data-wrevoke]').forEach(b=>b.onclick=async()=>{try{await api.adminSetWarningStatus(b.dataset.wrevoke,'revoked');toast('تم إلغاء التنبيه','success');renderAdminWarnings();}catch(e){toast(friendlyError(e),'error');}});}catch(e){box.innerHTML=errorBox(e);}
+  try{const rows=await api.adminGetWarnings(); if(!rows.length){box.innerHTML=emptyBox('⚠️','لا توجد تنبيهات','لا توجد تنبيهات مسجلة حاليًا.');return;} box.innerHTML=rows.map(w=>`<div class="card card-tight" style="margin-bottom:8px;"><div class="flex-between"><strong class="admin-link" data-open-code="${w.target_member_code}">${w.target_member_code}</strong><span class="badge ${w.status==='confirmed'?'badge-danger':'badge-warn'}">${w.status}</span></div><p class="mb0">${w.reason}</p><div class="flex gap8" style="margin-top:8px;">${w.status==='issued'?`<button class="btn btn-danger btn-sm" data-wconfirm="${w.id}">تأكيد التنبيه</button>`:''}${w.status==='confirmed'?`<button class="btn btn-outline btn-sm" data-wrevoke="${w.id}">إلغاء التنبيه</button>`:''}</div></div>`).join(''); box.querySelectorAll('[data-open-code]').forEach(el=>el.onclick=()=>openAdminUserDetailByCode(el.dataset.openCode)); box.querySelectorAll('[data-wconfirm]').forEach(b=>b.onclick=async()=>{try{await api.adminSetWarningStatus(b.dataset.wconfirm,'confirmed');toast('تم تأكيد التنبيه','success');renderAdminWarnings();}catch(e){toast(friendlyError(e),'error');}});box.querySelectorAll('[data-wrevoke]').forEach(b=>b.onclick=async()=>{try{await api.adminSetWarningStatus(b.dataset.wrevoke,'revoked');toast('تم إلغاء التنبيه','success');renderAdminWarnings();}catch(e){toast(friendlyError(e),'error');}});}catch(e){box.innerHTML=errorBox(e);}
 }
 async function renderAdminDisclosures(){
   const box=document.getElementById('admin-disclosures'); if(!box) return;
-  try{const rows=await api.adminGetContactDisclosures(); if(!rows.length){box.innerHTML=emptyBox('🔒','لا توجد طلبات كشف','ستظهر هنا طلبات الاتصال الناتجة عن القبول المتبادل.');return;} box.innerHTML=rows.map(d=>`<div class="card card-tight" style="margin-bottom:8px;"><div class="flex-between"><strong>${d.beneficiary_member_code}</strong><span class="badge ${d.approval_status==='approved'?'badge-success':d.approval_status==='rejected'?'badge-danger':'badge-warn'}">${d.approval_status}</span></div><p class="mb0">${d.contact_type==='guardian_phone'?'هاتف ولي الأمر':'الهاتف الشخصي'} · Request: ${d.request_id}</p>${d.approval_status==='pending'?`<div class="flex gap8" style="margin-top:8px;"><button class="btn btn-success btn-sm" data-dapprove="${d.id}">اعتماد</button><button class="btn btn-danger btn-sm" data-dreject="${d.id}">رفض</button></div>`:''}</div>`).join(''); box.querySelectorAll('[data-dapprove]').forEach(b=>b.onclick=async()=>{try{await api.adminReviewDisclosure(b.dataset.dapprove,'approved');toast('تم اعتماد كشف الاتصال','success');renderAdminDisclosures();}catch(e){toast(friendlyError(e),'error');}});box.querySelectorAll('[data-dreject]').forEach(b=>b.onclick=()=>{openModal(`<h3>رفض كشف الاتصال</h3><textarea id="dr-reason" placeholder="سبب الرفض"></textarea><div class="flex gap8" style="justify-content:flex-end;margin-top:12px;"><button class="btn btn-ghost" id="dr-cancel">إلغاء</button><button class="btn btn-danger" id="dr-ok">رفض</button></div>`,root=>{root.querySelector('#dr-cancel').onclick=closeModal;root.querySelector('#dr-ok').onclick=async()=>{try{await api.adminReviewDisclosure(b.dataset.dreject,'rejected',val('dr-reason')||null);closeModal();toast('تم رفض كشف الاتصال','success');renderAdminDisclosures();}catch(e){toast(friendlyError(e),'error');}};});});}catch(e){box.innerHTML=errorBox(e);}
+  try{const rows=await api.adminGetContactDisclosures(); if(!rows.length){box.innerHTML=emptyBox('🔒','لا توجد طلبات كشف','ستظهر هنا طلبات الاتصال الناتجة عن القبول المتبادل.');return;} box.innerHTML=rows.map(d=>`<div class="card card-tight" style="margin-bottom:8px;"><div class="flex-between"><strong class="admin-link" data-open-code="${d.beneficiary_member_code}">${d.beneficiary_member_code}</strong><span class="badge ${d.approval_status==='approved'?'badge-success':d.approval_status==='rejected'?'badge-danger':'badge-warn'}">${d.approval_status}</span></div><p class="mb0">${d.contact_type==='guardian_phone'?'هاتف ولي الأمر':'الهاتف الشخصي'} · Request: ${d.request_id}</p>${d.approval_status==='pending'?`<div class="flex gap8" style="margin-top:8px;"><button class="btn btn-success btn-sm" data-dapprove="${d.id}">اعتماد</button><button class="btn btn-danger btn-sm" data-dreject="${d.id}">رفض</button></div>`:''}</div>`).join(''); box.querySelectorAll('[data-open-code]').forEach(el=>el.onclick=()=>openAdminUserDetailByCode(el.dataset.openCode)); box.querySelectorAll('[data-dapprove]').forEach(b=>b.onclick=async()=>{try{await api.adminReviewDisclosure(b.dataset.dapprove,'approved');toast('تم اعتماد كشف الاتصال','success');renderAdminDisclosures();}catch(e){toast(friendlyError(e),'error');}});box.querySelectorAll('[data-dreject]').forEach(b=>b.onclick=()=>{openModal(`<h3>رفض كشف الاتصال</h3><textarea id="dr-reason" placeholder="سبب الرفض"></textarea><div class="flex gap8" style="justify-content:flex-end;margin-top:12px;"><button class="btn btn-ghost" id="dr-cancel">إلغاء</button><button class="btn btn-danger" id="dr-ok">رفض</button></div>`,root=>{root.querySelector('#dr-cancel').onclick=closeModal;root.querySelector('#dr-ok').onclick=async()=>{try{await api.adminReviewDisclosure(b.dataset.dreject,'rejected',val('dr-reason')||null);closeModal();toast('تم رفض كشف الاتصال','success');renderAdminDisclosures();}catch(e){toast(friendlyError(e),'error');}};});});}catch(e){box.innerHTML=errorBox(e);}
 }
 
 // SUPER_ADMIN is intentionally excluded — this panel must never be able to grant or
@@ -3181,47 +3452,95 @@ async function renderAdminsList(){
   }catch(e){ list.innerHTML = errorBox(e); }
 }
 
-async function renderAdminRequests(){
+// Marriage-request history tabs. "review_*" tabs come from marriage_request_reviews
+// (the admin's own approve/reject decision); "final_*"/"withdrawn" come from
+// marriage_requests.status (what the two members themselves did). Both are shown
+// together on each card so an admin never has to jump between screens to see the
+// full picture of one request.
+const ADMIN_REQ_TABS = [
+  {key:'review_pending', label:'بانتظار المراجعة الإدارية'},
+  {key:'review_approved', label:'معتمدة من الإدارة'},
+  {key:'review_rejected', label:'مرفوضة من الإدارة'},
+  {key:'final_accepted', label:'مقبولة من الطرفين'},
+  {key:'final_declined', label:'مرفوضة من الأعضاء'},
+  {key:'withdrawn', label:'منسحبة'},
+  {key:'all', label:'الكل'},
+];
+let adminReqTab = 'review_pending';
+function reqCardHtml(r, rev, codeMap, actions){
+  const senderCode = codeMap[r.sender_id] || r.sender_id;
+  const recipientCode = codeMap[r.recipient_id] || r.recipient_id;
+  return `<div class="card card-tight" id="admin-req-${r.id}" style="margin-bottom:10px;">
+    <p class="mb0"><strong>رقم الطلب:</strong> <span class="muted">${r.id}</span></p>
+    <p class="mb0"><strong>المرسل:</strong> <span class="admin-link" data-open-user="${r.sender_id}">${senderCode}</span></p>
+    <p class="mb0"><strong>المستقبل:</strong> <span class="admin-link" data-open-user="${r.recipient_id}">${recipientCode}</span></p>
+    <p class="mb0"><strong>تاريخ الإرسال:</strong> ${new Date(r.created_at).toLocaleString('ar-EG')}</p>
+    <p class="mb0"><strong>حالة الطلب:</strong> ${L('request_status', r.status)}</p>
+    <p class="mb0"><strong>حالة المراجعة الإدارية:</strong> ${rev? L('review_decision', rev.decision) : '—'}${rev&&rev.reason?` — السبب: ${rev.reason}`:''}</p>
+    ${actions||''}
+  </div>`;
+}
+async function renderAdminRequestsPanel(){
+  const container = document.getElementById('admin-req-container');
+  if(!container) return;
+  container.innerHTML = `<div class="admin-subtabs">${ADMIN_REQ_TABS.map(t=>`<div class="admin-subtab ${adminReqTab===t.key?'active':''}" data-reqtab="${t.key}">${t.label}</div>`).join('')}</div><div id="admin-req-list">${loadingBox()}</div>`;
+  container.querySelectorAll('[data-reqtab]').forEach(el=>el.onclick=()=>{ adminReqTab = el.dataset.reqtab; renderAdminRequestsPanel(); });
+  await renderAdminRequestsList();
+}
+async function renderAdminRequestsList(){
   const list = document.getElementById('admin-req-list');
+  if(!list) return;
   if(!S.adminPerms['requests.view'] && !S.adminPerms['requests.review']){
     list.innerHTML = emptyBox('🔒','لا تملك صلاحية','تحتاج صلاحية requests.view أو requests.review لعرض هذا القسم.');
     return;
   }
   try{
-    const {data: reviews, error} = await sb.from('marriage_request_reviews').select('*').eq('decision','pending').order('created_at');
-    if(error) throw error;
-    if(!reviews.length){ list.innerHTML = emptyBox('✅','لا توجد طلبات بانتظار المراجعة','كل الطلبات تمت مراجعتها حتى الآن.'); return; }
-    const {data: reqs, error:e2} = await sb.from('marriage_requests').select('*').in('id', reviews.map(r=>r.request_id));
-    if(e2) throw e2;
-    const reqMap = Object.fromEntries(reqs.map(r=>[r.id,r]));
-    // Resolve sender/recipient Member Codes for display (falls back to the raw UUID if this
-    // admin doesn't hold users.view for some reason — never breaks the list).
+    let reqs = []; let reviewMap = {};
+    if(adminReqTab==='review_pending' || adminReqTab==='review_approved' || adminReqTab==='review_rejected'){
+      const decision = adminReqTab==='review_pending' ? 'pending' : adminReqTab==='review_approved' ? 'approved' : 'rejected';
+      const {data: reviews, error} = await sb.from('marriage_request_reviews').select('*').eq('decision',decision).order('created_at',{ascending:false});
+      if(error) throw error;
+      if(!reviews.length){
+        list.innerHTML = decision==='pending'
+          ? emptyBox('✅','لا توجد طلبات بانتظار المراجعة','كل الطلبات تمت مراجعتها حتى الآن.')
+          : emptyBox('📭','لا توجد طلبات بهذه الحالة','لا توجد طلبات مطابقة حاليًا.');
+        return;
+      }
+      const {data: reqRows, error:e2} = await sb.from('marriage_requests').select('*').in('id', reviews.map(r=>r.request_id));
+      if(e2) throw e2;
+      const reqMap = Object.fromEntries(reqRows.map(r=>[r.id,r]));
+      reqs = reviews.map(rv=>reqMap[rv.request_id]).filter(Boolean);
+      reviewMap = Object.fromEntries(reviews.map(rv=>[rv.request_id, rv]));
+    }else{
+      let q = sb.from('marriage_requests').select('*').order('created_at',{ascending:false}).limit(200);
+      if(adminReqTab==='final_accepted') q = q.eq('status','accepted');
+      else if(adminReqTab==='final_declined') q = q.eq('status','declined');
+      else if(adminReqTab==='withdrawn') q = q.eq('status','withdrawn');
+      const {data, error} = await q;
+      if(error) throw error;
+      reqs = data||[];
+      if(reqs.length){
+        const {data: reviews} = await sb.from('marriage_request_reviews').select('*').in('request_id', reqs.map(r=>r.id));
+        reviewMap = Object.fromEntries((reviews||[]).map(rv=>[rv.request_id, rv]));
+      }
+    }
+    if(!reqs.length){ list.innerHTML = emptyBox('📭','لا توجد طلبات','لا توجد طلبات مطابقة لهذا التصنيف حاليًا.'); return; }
     let codeMap = {};
     try{
       if(!adminAllAccountsCache) adminAllAccountsCache = await api.adminListAllAccounts();
       codeMap = Object.fromEntries(adminAllAccountsCache.map(a=>[a.account_id, a.member_code]));
     }catch(_){ /* leave codeMap empty — UI falls back to raw UUID */ }
-    list.innerHTML = reviews.map(rv=>{
-      const r = reqMap[rv.request_id]; if(!r) return '';
-      const senderCode = codeMap[r.sender_id] || r.sender_id;
-      const recipientCode = codeMap[r.recipient_id] || r.recipient_id;
-      return `<div class="card card-tight" style="margin-bottom:10px;">
-        <p class="mb0"><strong>رقم الطلب:</strong> <span class="muted">${r.id}</span></p>
-        <p class="mb0"><strong>المرسل:</strong> <span class="admin-link" data-open-user="${r.sender_id}" style="cursor:pointer;color:var(--c-primary);font-weight:700;">${senderCode}</span> <span class="muted" style="font-size:12px;">(${r.sender_id})</span></p>
-        <p class="mb0"><strong>المستقبل:</strong> <span class="admin-link" data-open-user="${r.recipient_id}" style="cursor:pointer;color:var(--c-primary);font-weight:700;">${recipientCode}</span> <span class="muted" style="font-size:12px;">(${r.recipient_id})</span></p>
-        <p class="mb0"><strong>تاريخ الإرسال:</strong> ${new Date(r.created_at).toLocaleString('ar-EG')}</p>
-        <p class="mb0"><strong>الحالة:</strong> ${L('request_status', r.status)}</p>
-        ${S.adminPerms['requests.review']? `
-        <div class="flex gap8" style="margin-top:10px;">
-          <button class="btn btn-success btn-sm" data-approve="${r.id}">اعتماد</button>
-          <button class="btn btn-danger btn-sm" data-reject="${r.id}">رفض</button>
-        </div>` : `<p class="hint">تملك صلاحية العرض فقط، وليس المراجعة.</p>`}
-      </div>`;
+    const showActions = adminReqTab==='review_pending' && S.adminPerms['requests.review'];
+    list.innerHTML = reqs.map(r=>{
+      const rev = reviewMap[r.id];
+      const actions = showActions ? `<div class="flex gap8" style="margin-top:10px;"><button class="btn btn-success btn-sm" data-approve="${r.id}">اعتماد</button><button class="btn btn-danger btn-sm" data-reject="${r.id}">رفض</button></div>` : '';
+      return reqCardHtml(r, rev, codeMap, actions);
     }).join('');
+    applyRequestHighlight('admin-req-');
     list.querySelectorAll('[data-open-user]').forEach(el=>el.onclick=()=>openAdminUserDetail(el.dataset.openUser));
     list.querySelectorAll('[data-approve]').forEach(b=>b.onclick=()=>{
       confirmModal('اعتماد الطلب','هل تعتمد هذا الطلب لإرساله للطرف المستقبل؟','اعتماد', async ()=>{
-        try{ await api.adminReview(b.dataset.approve,'approved'); toast('تم الاعتماد','success'); renderAdminRequests(); }
+        try{ await api.adminReview(b.dataset.approve,'approved'); toast('تم الاعتماد','success'); renderAdminRequestsList(); }
         catch(e){ toast(friendlyError(e),'error'); }
       });
     });
@@ -3234,12 +3553,49 @@ async function renderAdminRequests(){
         root.querySelector('#rej-ok').onclick = async ()=>{
           const reason = document.getElementById('rej-reason').value.trim();
           closeModal();
-          try{ await api.adminReview(b.dataset.reject,'rejected',reason||null); toast('تم الرفض','success'); renderAdminRequests(); }
+          try{ await api.adminReview(b.dataset.reject,'rejected',reason||null); toast('تم الرفض','success'); renderAdminRequestsList(); }
           catch(e){ toast(friendlyError(e),'error'); }
         };
       });
     });
   }catch(e){ list.innerHTML = errorBox(e); }
+}
+
+// Reads directly from admin_audit_log (same direct-table pattern already used for
+// marriage_requests/marriage_request_reviews above) — RLS/Grants on that table decide
+// what each admin can actually see, this just renders whatever comes back. Column
+// names are read defensively (several likely names tried per field) since the exact
+// schema isn't available from the frontend alone.
+async function renderAdminAuditLog(){
+  const box = document.getElementById('admin-audit-log');
+  if(!box) return;
+  try{
+    const {data, error} = await sb.from('admin_audit_log').select('*').order('created_at',{ascending:false}).limit(200);
+    if(error) throw error;
+    if(!data || !data.length){ box.innerHTML = emptyBox('📜','لا توجد سجلات تدقيق بعد','ستظهر هنا كل العمليات الحساسة التي ينفذها المشرفون.'); return; }
+    let codeMap = {};
+    try{
+      if(!adminAllAccountsCache) adminAllAccountsCache = await api.adminListAllAccounts();
+      codeMap = Object.fromEntries(adminAllAccountsCache.map(a=>[a.account_id, a.member_code]));
+    }catch(_){}
+    box.innerHTML = data.map(row=>{
+      const adminId = row.admin_user_id || row.actor_id || row.admin_id || row.performed_by || null;
+      const adminCode = adminId ? (codeMap[adminId]||adminId) : '—';
+      const action = row.action || row.action_type || row.event_type || '—';
+      const targetId = row.target_id || row.target_user_id || row.subject_id || null;
+      const targetCode = targetId ? (codeMap[targetId]||targetId) : null;
+      const when = row.created_at ? formatDateTimeAr(row.created_at) : '—';
+      const details = row.details || row.metadata || row.notes || null;
+      const detailsStr = details ? (typeof details==='string' ? details : JSON.stringify(details)) : null;
+      return `<div class="card card-tight" style="margin-bottom:8px;">
+        <div class="flex-between"><strong>${action}</strong><span class="muted" style="font-size:12px;">${when}</span></div>
+        <p class="mb0">المشرف: ${adminId?`<span class="admin-link" data-open-user="${adminId}">${adminCode}</span>`:'—'}</p>
+        ${targetCode?`<p class="mb0">الهدف: <span class="admin-link" data-open-user="${targetId}">${targetCode}</span></p>`:''}
+        ${detailsStr?`<p class="mb0 muted" style="font-size:12.5px;word-break:break-word;">${detailsStr}</p>`:''}
+      </div>`;
+    }).join('');
+    box.querySelectorAll('[data-open-user]').forEach(el=>el.onclick=()=>openAdminUserDetail(el.dataset.openUser));
+  }catch(e){ box.innerHTML = errorBox(e); }
 }
 
 /* =========================================================
