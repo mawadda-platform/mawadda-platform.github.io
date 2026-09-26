@@ -1952,7 +1952,7 @@ function renderAccountForm(panel, p){
       <div><label>المركز</label><select id="ac-city_id"><option value="">اختر المحافظة أولًا</option></select></div>
     </div>
     <div id="ac-village_area-wrap" style="display:none;">
-      <label>المنطقة / القرية / النجع <span style="color:var(--c-danger);">*</span></label>
+      <label>المنطقة / القرية / النجع <span class="muted" style="font-weight:400;">(اختياري)</span></label>
       <input type="text" id="ac-village_area" maxlength="150" value="${p.village_area||''}">
     </div>
     <label>الصورة الرمزية (Avatar)</label>
@@ -2007,11 +2007,6 @@ function renderAccountForm(panel, p){
 
   document.getElementById('ac-save').onclick = async ()=>{
     const btn = document.getElementById('ac-save');
-    if(citySel.value && !val('ac-village_area')){
-      toast('المنطقة / القرية / النجع إجباري بعد اختيار المركز','error');
-      villageInput.focus();
-      return;
-    }
     btn.disabled=true; btn.textContent='جارٍ الحفظ…';
     try{
       // 1) Phone — only through the existing phone RPC/system, only if changed.
@@ -2092,9 +2087,8 @@ function renderBasicForm(panel, p){
       <div><label>المدينة/المركز</label><select id="pf-city_id"><option value="">اختر المحافظة أولًا</option></select></div>
     </div>
     <div id="pf-village_area-wrap" style="display:none;">
-      <label>المنطقة / القرية / النجع <span style="color:var(--c-danger);">*</span></label>
+      <label>المنطقة / القرية / النجع <span class="muted" style="font-weight:400;">(اختياري)</span></label>
       <input type="text" id="pf-village_area" maxlength="150" placeholder="اكتب اسم المنطقة أو القرية أو النجع" value="${p.village_area||''}">
-      <div class="hint">إجباري بعد اختيار المركز — يكتبه المستخدم بنفسه.</div>
     </div>
     <label>نبذة شخصية</label><textarea id="pf-bio">${p.bio||''}</textarea>
     <button class="btn btn-primary btn-block" id="pf-save" style="margin-top:16px;">حفظ البيانات الأساسية</button>
@@ -2152,11 +2146,6 @@ function renderBasicForm(panel, p){
 
   document.getElementById('pf-save').onclick = async ()=>{
     const btn = document.getElementById('pf-save');
-    if(citySel.value && !val('pf-village_area')){
-      toast('المنطقة / القرية / النجع إجباري بعد اختيار المركز','error');
-      villageInput.focus();
-      return;
-    }
     btn.disabled=true; btn.textContent='جارٍ الحفظ…';
     try{
       const payload = {
@@ -2212,6 +2201,16 @@ function wireOtherReveal(selectId, fieldPrefix){
 }
 function val(id){ const el=document.getElementById(id); return el? el.value.trim ? el.value.trim() : el.value : ''; }
 function numOrNull(id){ const v = val(id); return (v===''||v===undefined) ? null : Number(v); }
+// Formats a DB timestamp (e.g. user_accounts.created_at) as "26/09/2026 — 05:10 م".
+// Always derived from the timestamp string itself — never the local clock or localStorage.
+function formatDateTimeAr(iso){
+  if(!iso) return '—';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '—';
+  const datePart = d.toLocaleDateString('ar-EG-u-nu-latn', {day:'2-digit', month:'2-digit', year:'numeric'});
+  const timePart = d.toLocaleTimeString('ar-EG-u-nu-latn', {hour:'2-digit', minute:'2-digit', hour12:true});
+  return `${datePart} — ${timePart}`;
+}
 
 function renderLifestyleForm(panel, l){
   panel.innerHTML = `
@@ -2894,7 +2893,7 @@ async function renderAdminAllAccounts(){
         <p class="mb0"><strong>Member Code: ${r.member_code}</strong>${r.full_name?` · ${r.full_name}`:''}</p>
         <p class="mb0 muted" style="font-size:12px;">Account ID: ${r.account_id}</p>
         ${authLine}
-        <p class="mb0 muted" style="font-size:12px;">الحالة: ${r.status} — أُنشئ: ${new Date(r.created_at).toLocaleDateString('ar-EG')}</p>
+        <p class="mb0 muted" style="font-size:12px;">الحالة: ${r.status} — أُنشئ: ${formatDateTimeAr(r.created_at)}</p>
       </div>`;
     }).join('');
   }catch(e){ box.innerHTML = errorBox(e); }
@@ -3016,7 +3015,7 @@ function mountAdminManagement(){
           <div>
             <p class="mb0"><strong>Member Code: ${u.member_code}</strong>${u.full_name?` · ${u.full_name}`:''}</p>
             ${u.google_email ? `<p class="mb0 muted">Google Account: ${u.google_email}</p>` : `<p class="mb0 muted">${u.email||'—'}</p>`}
-            <p class="mb0 muted" style="font-size:12px;">الحالة: ${u.status} — أُنشئ: ${new Date(u.created_at).toLocaleDateString('ar-EG')}</p>
+            <p class="mb0 muted" style="font-size:12px;">الحالة: ${u.status} — أُنشئ: ${formatDateTimeAr(u.created_at)}</p>
             ${roleBadges}
           </div>
           <div class="flex gap8" style="flex-wrap:wrap;align-items:center;">
