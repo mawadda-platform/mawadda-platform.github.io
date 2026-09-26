@@ -661,19 +661,33 @@ const LABELS = {
   hijab:{none:'بدون حجاب',hijab:'حجاب',niqab:'نقاب',other:'أخرى — اكتب'},
   health_status:{good:'جيدة',fair:'متوسطة',has_condition:'توجد حالة صحية'},
   disability_type:{none:'لا يوجد',physical_mobility:'حركية',visual_impairment:'بصرية',hearing_impairment:'سمعية',chronic_illness:'مرض مزمن',other:'أخرى'},
-  education_level:{below_secondary:'أقل من ثانوي',secondary:'ثانوي',diploma:'دبلوم',bachelor:'بكالوريوس',master:'ماجستير',phd:'دكتوراه',other:'أخرى — اكتب'},
+  education_level:{below_secondary:'أقل من ثانوي',secondary:'ثانوي',diploma:'دبلوم',diploma_intermediate:'دبلوم متوسط',bachelor:'بكالوريوس',master:'ماجستير',phd:'دكتوراه',other:'أخرى — اكتب'},
   work_stability:{stable:'مستقر',unstable:'غير مستقر',seeking_work:'يبحث عن عمل',not_working:'لا يعمل',student:'طالب'},
   marital_status:{single:'أعزب/عزباء',divorced:'مطلّق/ة',widowed:'أرمل/ة',married:'متزوج/ة'},
+  // Gendered phrasing of marital_status for use where the *target* gender is known (partner
+  // preferences: a man's preferences describe a woman, and vice-versa). Internal enum values
+  // (single/divorced/widowed/married) are unchanged — only the displayed Arabic text differs.
+  marital_status_by_target_gender:{
+    male:{single:'أعزب',divorced:'مطلّق',widowed:'أرمل',married:'متزوج'},
+    female:{single:'عزباء',divorced:'مطلّقة',widowed:'أرملة',married:'متزوجة'}
+  },
   housing_status:{owns_housing:'يملك سكن',renting:'إيجار',will_provide_after_marriage:'سيوفر سكن بعد الزواج',living_with_family:'يسكن مع الأهل'},
   housing_type:{independent_apartment:'شقة مستقلة',shared_with_family:'مشتركة مع الأهل',other:'أخرى'},
   relocation_willingness:{yes:'نعم',no:'لا',depends:'حسب الظروف'},
   work_after_marriage:{yes:'نعم',no:'لا',depends:'حسب الظروف',not_applicable:'لا ينطبق'},
+  // Gendered phrasing for "العمل بعد الزواج" as a *preference*: a man is answering about his
+  // future wife working, a woman is answering about her future husband working. Same
+  // work_after_marriage_type enum values (yes/no/depends/not_applicable) throughout.
+  work_after_marriage_pref_by_viewer_gender:{
+    male:{yes:'تعمل',no:'لا تعمل',depends:'تعمل إذا رغبت',not_applicable:'لا ينطبق'},
+    female:{yes:'يعمل',no:'لا يعمل',depends:'يعمل إذا رغب',not_applicable:'لا ينطبق'}
+  },
   childbearing_preference:{wants_children:'يريد أطفال',open_to_children:'منفتح على الفكرة',does_not_want_children:'لا يريد أطفال',undecided:'غير محدد'},
   home_readiness:{ready:'جاهز',in_preparation:'قيد التجهيز',not_ready:'غير جاهز',not_applicable:'لا ينطبق'},
   commitment:{always:'دائمًا',mostly:'غالبًا',sometimes:'أحيانًا',rarely:'نادرًا'},
   smoking_status:{non_smoker:'غير مدخن',smoker:'مدخن',trying_to_quit:'يحاول الإقلاع',occasional:'أحيانًا'},
   personality_trait:{responsible:'مسؤول',honest:'صادق',family_oriented:'أسري',cooperative:'متعاون',calm:'هادئ',ambitious:'طموح',social:'اجتماعي',humble:'متواضع',organized:'منظم',privacy_respecting:'يحترم الخصوصية'},
-  children_preference:{no_preference:'بدون تفضيل',accepts:'يتقبل',prefers_none:'يفضل عدم وجودهم'},
+  children_preference:{no_preference:'لا يهم',accepts:'نعم، يتقبل وجود أبناء',prefers_none:'لا، يفضل عدم وجود أبناء'},
   polygamy_preference_male:{no_interest:'غير مهتم',accept_consider:'يقبل وينظر بالأمر',seeking:'يسعى إليه',discuss_with_admin:'يُناقش مع الإدارة'},
   polygamy_preference_female:{accept_married_man:'تقبل رجل متزوج',do_not_accept:'لا تقبل',depends:'حسب الظروف',discuss_with_admin:'يُناقش مع الإدارة'},
   request_status:{pending:'قيد المراجعة',accepted:'مقبول',declined:'مرفوض',withdrawn:'مسحوب'},
@@ -2089,8 +2103,8 @@ function renderBasicForm(panel, p){
       <div><label>تاريخ الميلاد *</label><input type="date" id="pf-date_of_birth" value="${p.date_of_birth||''}"></div>
     </div>
     <div class="row-2">
-      <div><label>الطول (سم) *</label><input type="number" id="pf-height_cm" step="1" min="100" max="250" value="${p.height_cm||''}"></div>
-      <div><label>الوزن (كجم) *</label><input type="number" id="pf-weight_kg" step="1" min="30" max="300" value="${p.weight_kg||''}"></div>
+      <div><label>الطول (سم) *</label><input type="number" id="pf-height_cm" step="0.1" min="100" max="250" value="${p.height_cm??''}"></div>
+      <div><label>الوزن (كجم) *</label><input type="number" id="pf-weight_kg" step="0.1" min="30" max="300" value="${p.weight_kg??''}"></div>
     </div>
     <div class="row-2">
       <div><label>البنية الجسدية *</label><select id="pf-body_build"><option value="">—</option>${selOpts('body_build',p.body_build)}</select>
@@ -2197,8 +2211,8 @@ function renderBasicForm(panel, p){
       // Validate every smallint-backed numeric field up front, before building the payload,
       // so a bad value (e.g. a decimal like "191.4") never reaches the DB as 22P02 — the user
       // gets one clear, field-specific message instead.
-      const height_cm = intOrNull('pf-height_cm', 'الطول', 100, 250);
-      const weight_kg = intOrNull('pf-weight_kg', 'الوزن', 30, 300);
+      const height_cm = decimalOrNull('pf-height_cm', 'الطول', 100, 250);
+      const weight_kg = decimalOrNull('pf-weight_kg', 'الوزن', 30, 300);
       const children_count = intOrNull('pf-children_count', 'عدد الأبناء', 0) ?? 0;
       // All identifying fields are mandatory so admins can reliably match/verify members;
       // every select still lets the person choose "أخرى — اكتب" or an existing neutral
@@ -2281,6 +2295,20 @@ function intOrNull(id, label, lo, hi){
   const n = Number(v);
   if(!Number.isFinite(n)) throw Object.assign(new Error(`${label}: قيمة غير صالحة`), {isValidationError:true});
   if(!Number.isInteger(n)) throw Object.assign(new Error(`${label} يجب أن يكون رقمًا صحيحًا بدون كسور عشرية (مثال: 191 وليس 191.4)`), {isValidationError:true});
+  if(lo!==undefined && n<lo) throw Object.assign(new Error(`${label} يجب ألا يقل عن ${lo}`), {isValidationError:true});
+  if(hi!==undefined && n>hi) throw Object.assign(new Error(`${label} يجب ألا يزيد عن ${hi}`), {isValidationError:true});
+  return n;
+}
+// Decimal parser for the numeric(5,1) height_cm/weight_kg columns (e.g. 170.5, 75.5, 191.4).
+// Deliberately never uses parseInt/Math.round — a value like 191.4 must reach Postgres exactly
+// as typed, never silently rounded to 191. Only rejects more than one decimal place, since the
+// DB column itself cannot store more precision than that.
+function decimalOrNull(id, label, lo, hi){
+  const v = val(id);
+  if(v===''||v===undefined||v===null) return null;
+  const n = Number(v);
+  if(!Number.isFinite(n)) throw Object.assign(new Error(`${label}: قيمة غير صالحة`), {isValidationError:true});
+  if(/\.\d{2,}$/.test(String(v))) throw Object.assign(new Error(`${label}: رقم عشري بخانة واحدة كحد أقصى (مثال: 170.5)`), {isValidationError:true});
   if(lo!==undefined && n<lo) throw Object.assign(new Error(`${label} يجب ألا يقل عن ${lo}`), {isValidationError:true});
   if(hi!==undefined && n>hi) throw Object.assign(new Error(`${label} يجب ألا يزيد عن ${hi}`), {isValidationError:true});
   return n;
@@ -2448,62 +2476,123 @@ function renderSensitiveForm(panel, s){
 /* =========================================================
    PREFERENCES
 ========================================================= */
+// A numeric preference bound (min_age, max_height_cm, ...) rendered as an explicit choice
+// between "لا يهم" (no filter — stored as NULL) and "تحديد قيمة" (a real number). Selecting
+// "لا يهم" disables the input and blanks it, so there is no ambiguity between "empty because
+// unanswered" and "explicitly doesn't matter" — both simply save as NULL, but the UI state is
+// never silently invented from an empty box.
+function numPrefFieldHtml(id, label, lo, hi, step, value){
+  const isNA = (value===null || value===undefined || value==='');
+  return `<div style="margin-bottom:10px;">
+    <label>${label}</label>
+    <div style="display:flex;gap:14px;align-items:center;margin:4px 0 6px;">
+      <label style="display:flex;align-items:center;gap:5px;font-weight:400;"><input type="radio" name="${id}-mode" value="na" ${isNA?'checked':''}> لا يهم</label>
+      <label style="display:flex;align-items:center;gap:5px;font-weight:400;"><input type="radio" name="${id}-mode" value="set" ${isNA?'':'checked'}> تحديد قيمة</label>
+    </div>
+    <input type="number" id="${id}" step="${step}" min="${lo}" max="${hi}" value="${isNA?'':value}" ${isNA?'disabled':''}>
+  </div>`;
+}
+function wireNumPrefField(id){
+  const input = document.getElementById(id);
+  const naRadio = document.querySelector(`input[name="${id}-mode"][value="na"]`);
+  const setRadio = document.querySelector(`input[name="${id}-mode"][value="set"]`);
+  if(!input || !naRadio || !setRadio) return;
+  naRadio.onchange = ()=>{ if(naRadio.checked){ input.value=''; input.disabled = true; } };
+  setRadio.onchange = ()=>{ if(setRadio.checked){ input.disabled = false; } };
+}
+// null when "لا يهم" is selected, otherwise delegates to the given throwing parser
+// (intOrNull for whole-number columns, decimalOrNull for numeric(5,1) columns) so bounds
+// and decimal-place rules are enforced exactly the same way as everywhere else in the app.
+function readNumPrefField(id, parserFn, label, lo, hi){
+  const naRadio = document.querySelector(`input[name="${id}-mode"][value="na"]`);
+  if(naRadio && naRadio.checked) return null;
+  return parserFn(id, label, lo, hi);
+}
+
 async function mountPreferences(app){
   app.innerHTML = loadingBox('جارِ تحميل تفضيلاتك…');
   let data;
   try{ data = await api.getMyPreferences(); }catch(e){ app.innerHTML = errorBox(e); return; }
   await ensureGeo();
+  // The gender-specific section (and the gendered wording below) must never wrongly claim
+  // "complete your basic data first" when gender is already saved — S.profile is only
+  // populated by visiting /profile, so if the person came here first, fetch it now.
+  if(!S.profile){
+    try{ S.profile = await api.getMyFullProfile(); }catch(e){ /* non-fatal: falls back to the existing gender-unknown message below */ }
+  }
   const pr = data.preferences || {};
   const selectedGovIds = new Set((data.preferred_governorates||[]).map(g=>g.governorate_id));
   const myGender = (S.profile && S.profile.profile && S.profile.profile.gender) || null;
+  // The person being searched for is the opposite gender — preference wording (marital
+  // status, "work after marriage") is phrased about *that* target gender, not the viewer's.
+  const targetGender = myGender==='male' ? 'female' : (myGender==='female' ? 'male' : null);
+  const maritalLabels = targetGender ? LABELS.marital_status_by_target_gender[targetGender] : LABELS.marital_status;
+  const workAfterLabels = myGender ? LABELS.work_after_marriage_pref_by_viewer_gender[myGender] : LABELS.work_after_marriage;
+  const skinOtherOn = (pr.skin_tones_preferred||[]).includes('other');
+
   app.innerHTML = `
   <div class="container">
     <h2>تفضيلات شريك الحياة</h2>
     <div class="card">
-      <div class="row-2">
-        <div><label>الحد الأدنى للعمر</label><input type="number" id="pr-min_age" min="18" max="100" value="${pr.min_age??''}"></div>
-        <div><label>الحد الأقصى للعمر</label><input type="number" id="pr-max_age" min="18" max="100" value="${pr.max_age??''}"></div>
-      </div>
-      <div class="row-2">
-        <div><label>الحد الأدنى للطول (سم)</label><input type="number" id="pr-min_height_cm" min="100" max="250" value="${pr.min_height_cm??''}"></div>
-        <div><label>الحد الأقصى للطول (سم)</label><input type="number" id="pr-max_height_cm" min="100" max="250" value="${pr.max_height_cm??''}"></div>
-      </div>
-      <div class="row-2">
-        <div><label>الحد الأدنى للوزن (كجم)</label><input type="number" id="pr-min_weight_kg" min="30" max="300" value="${pr.min_weight_kg??''}"></div>
-        <div><label>الحد الأقصى للوزن (كجم)</label><input type="number" id="pr-max_weight_kg" min="30" max="300" value="${pr.max_weight_kg??''}"></div>
-      </div>
+      ${numPrefFieldHtml('pr-min_age','الحد الأدنى للعمر',18,100,'1',pr.min_age)}
+      ${numPrefFieldHtml('pr-max_age','الحد الأقصى للعمر',18,100,'1',pr.max_age)}
+      ${numPrefFieldHtml('pr-min_height_cm','الحد الأدنى للطول (سم)',100,250,'0.1',pr.min_height_cm)}
+      ${numPrefFieldHtml('pr-max_height_cm','الحد الأقصى للطول (سم)',100,250,'0.1',pr.max_height_cm)}
+      ${numPrefFieldHtml('pr-min_weight_kg','الحد الأدنى للوزن (كجم)',30,300,'0.1',pr.min_weight_kg)}
+      ${numPrefFieldHtml('pr-max_weight_kg','الحد الأقصى للوزن (كجم)',30,300,'0.1',pr.max_weight_kg)}
 
       <label>لون البشرة المفضل</label><div id="chips-skin">${multiChips('skin_tone', pr.skin_tones_preferred)}</div>
-      <label>الحالة الاجتماعية المقبولة</label><div id="chips-marital">${multiChips('marital_status', pr.marital_statuses_preferred)}</div>
-      <label>وجود أبناء</label><select id="pr-children_preference"><option value="">—</option>${selOpts('children_preference',pr.children_preference)}</select>
+      <div id="pr-skin-other-wrap" style="display:${skinOtherOn?'block':'none'};margin:6px 0 12px;">
+        <label>اكتب لون البشرة</label>
+        <input type="text" id="pr-skin_tone_other_details" maxlength="150" value="${pr.skin_tone_preferred_other_details||''}">
+      </div>
+
+      <label>الحالة الاجتماعية المقبولة</label><div id="chips-marital">${multiChipsFromLabels(maritalLabels, pr.marital_statuses_preferred)}</div>
+      <label>وجود أبناء</label><select id="pr-children_preference"><option value="">لا يهم</option>${selOpts('children_preference',pr.children_preference)}</select>
       <label>المؤهل الدراسي المفضل</label><div id="chips-edu">${multiChips('education_level', pr.education_levels_preferred)}</div>
       <label>استقرار العمل المفضل</label><div id="chips-work">${multiChips('work_stability', pr.work_stability_preferred)}</div>
       <label>الحالة السكنية المفضلة</label><div id="chips-housing">${multiChips('housing_status', pr.housing_status_preferred)}</div>
-      <label>الاستعداد للانتقال</label><select id="pr-relocation_preference"><option value="">—</option>${selOpts('relocation_willingness',pr.relocation_preference)}</select>
+      <label>الاستعداد للانتقال</label><select id="pr-relocation_preference"><option value="">لا يهم</option>${selOpts('relocation_willingness',pr.relocation_preference)}</select>
       <label>التدخين المقبول</label><div id="chips-smoking">${multiChips('smoking_status', pr.smoking_status_preferred)}</div>
-      <label>العمل بعد الزواج</label><select id="pr-work_after_marriage_preference"><option value="">—</option>${selOpts('work_after_marriage',pr.work_after_marriage_preference)}</select>
-      <label>الرغبة في الإنجاب</label><select id="pr-childbearing_preference_match"><option value="">—</option>${selOpts('childbearing_preference',pr.childbearing_preference_match)}</select>
+      <label>${myGender==='female' ? 'العمل بعد الزواج (للزوج)' : myGender==='male' ? 'العمل بعد الزواج (للزوجة)' : 'العمل بعد الزواج'}</label>
+      <select id="pr-work_after_marriage_preference"><option value="">لا يهم</option>${Object.entries(workAfterLabels).map(([v,t])=>`<option value="${v}" ${pr.work_after_marriage_preference===v?'selected':''}>${t}</option>`).join('')}</select>
+      <label>الرغبة في الإنجاب</label><select id="pr-childbearing_preference_match"><option value="">لا يهم</option>${selOpts('childbearing_preference',pr.childbearing_preference_match)}</select>
       <div id="gender-specific-pref"></div>
       <label>السمات الشخصية المفضلة</label><div id="chips-traits">${multiChips('personality_trait', pr.personality_traits_preferred)}</div>
 
       <label>المحافظات المفضلة</label>
-      <div id="chips-gov">${S.governorates.map(g=>`<span class="chip chip-select ${selectedGovIds.has(g.id)?'on':''}" data-v="${g.id}">${g.name_ar}</span>`).join('')}</div>
+      <div id="chips-gov">
+        <span class="chip chip-select chip-na ${selectedGovIds.size===0?'on':''}" data-na="1" data-v="">لا يهم</span>
+        ${S.governorates.map(g=>`<span class="chip chip-select ${selectedGovIds.has(g.id)?'on':''}" data-v="${g.id}">${g.name_ar}</span>`).join('')}
+      </div>
       <p class="hint">اختيار المحافظات يحدد لاحقًا نطاق اختيار المدن (إن توفرت مدن مضافة للمحافظة).</p>
 
       <button class="btn btn-primary btn-block" id="pr-save" style="margin-top:18px;">حفظ التفضيلات</button>
     </div>
   </div>`;
+
+  ['pr-min_age','pr-max_age','pr-min_height_cm','pr-max_height_cm','pr-min_weight_kg','pr-max_weight_kg'].forEach(wireNumPrefField);
+
   const genderWrap = document.getElementById('gender-specific-pref');
   if(myGender==='male'){
     genderWrap.innerHTML = `<label>الحجاب المفضل</label><div id="chips-hijab">${multiChips('hijab', pr.hijab_preference)}</div>
-      <label>تعدد الزوجات</label><select id="pr-polygamy_preference_male"><option value="">—</option>${selOpts('polygamy_preference_male',pr.polygamy_preference_male)}</select>`;
+      <label>تعدد الزوجات</label><select id="pr-polygamy_preference_male"><option value="">لا يهم</option>${selOpts('polygamy_preference_male',pr.polygamy_preference_male)}</select>`;
   } else if(myGender==='female'){
     genderWrap.innerHTML = `<label>اللحية المفضلة</label><div id="chips-beard">${multiChips('beard', pr.beard_preference)}</div>
-      <label>موقفك من تعدد الزوجات</label><select id="pr-polygamy_preference_female"><option value="">—</option>${selOpts('polygamy_preference_female',pr.polygamy_preference_female)}</select>`;
+      <label>موقفك من تعدد الزوجات</label><select id="pr-polygamy_preference_female"><option value="">لا يهم</option>${selOpts('polygamy_preference_female',pr.polygamy_preference_female)}</select>`;
   } else {
     genderWrap.innerHTML = `<p class="hint">أكمل بياناتك الأساسية (الجنس) أولًا لعرض تفضيلات إضافية خاصة بك.</p>`;
   }
-  document.querySelectorAll('.chip-select').forEach(chip=> chip.onclick = ()=> chip.classList.toggle('on'));
+
+  const syncSkinOtherVisibility = ()=>{
+    const wrap = document.getElementById('pr-skin-other-wrap');
+    const otherChip = document.querySelector('#chips-skin .chip-select[data-v="other"]');
+    const isOn = otherChip && otherChip.classList.contains('on');
+    wrap.style.display = isOn ? 'block' : 'none';
+    if(!isOn) document.getElementById('pr-skin_tone_other_details').value = '';
+  };
+  ['chips-skin','chips-marital','chips-edu','chips-work','chips-housing','chips-smoking','chips-traits','chips-gov','chips-hijab','chips-beard']
+    .forEach(id=> wireChipGroup(id, id==='chips-skin' ? syncSkinOtherVisibility : undefined));
 
   document.getElementById('pr-save').onclick = async ()=>{
     const btn = document.getElementById('pr-save');
@@ -2511,12 +2600,21 @@ async function mountPreferences(app){
     if(rangeErr){ toast(rangeErr,'error'); return; }
     btn.disabled=true; btn.textContent='جارٍ الحفظ…';
     try{
+      const skinTones = chipsOn('chips-skin');
+      if(skinTones.includes('other') && !val('pr-skin_tone_other_details')){
+        throw Object.assign(new Error('لون البشرة: يرجى كتابة الوصف عند اختيار "أخرى".'), {isValidationError:true});
+      }
       const payload = {
         user_id: S.session.user.id,
-        min_age:numOrNull('pr-min_age'), max_age:numOrNull('pr-max_age'),
-        min_height_cm:numOrNull('pr-min_height_cm'), max_height_cm:numOrNull('pr-max_height_cm'),
-        min_weight_kg:numOrNull('pr-min_weight_kg'), max_weight_kg:numOrNull('pr-max_weight_kg'),
-        skin_tones_preferred: chipsOn('chips-skin'), marital_statuses_preferred: chipsOn('chips-marital'),
+        min_age: readNumPrefField('pr-min_age', intOrNull, 'الحد الأدنى للعمر', 18, 100),
+        max_age: readNumPrefField('pr-max_age', intOrNull, 'الحد الأقصى للعمر', 18, 100),
+        min_height_cm: readNumPrefField('pr-min_height_cm', decimalOrNull, 'الحد الأدنى للطول', 100, 250),
+        max_height_cm: readNumPrefField('pr-max_height_cm', decimalOrNull, 'الحد الأقصى للطول', 100, 250),
+        min_weight_kg: readNumPrefField('pr-min_weight_kg', decimalOrNull, 'الحد الأدنى للوزن', 30, 300),
+        max_weight_kg: readNumPrefField('pr-max_weight_kg', decimalOrNull, 'الحد الأقصى للوزن', 30, 300),
+        skin_tones_preferred: skinTones,
+        skin_tone_preferred_other_details: skinTones.includes('other') ? (val('pr-skin_tone_other_details')||null) : null,
+        marital_statuses_preferred: chipsOn('chips-marital'),
         children_preference: val('pr-children_preference')||null,
         education_levels_preferred: chipsOn('chips-edu'), work_stability_preferred: chipsOn('chips-work'),
         housing_status_preferred: chipsOn('chips-housing'), relocation_preference: val('pr-relocation_preference')||null,
@@ -2530,7 +2628,7 @@ async function mountPreferences(app){
       const {error} = await sb.from('user_preferences').upsert(payload, {onConflict:'user_id'});
       if(error) throw error;
 
-      // sync preferred governorates (diff insert/delete)
+      // sync preferred governorates (diff insert/delete) — "لا يهم" simply means an empty set
       const newGovIds = new Set(chipsOn('chips-gov').map(Number));
       const {data: existingGov} = await sb.from('user_preference_governorates').select('id,governorate_id').eq('user_id', S.session.user.id);
       const existingIds = new Set((existingGov||[]).map(r=>r.governorate_id));
@@ -2548,25 +2646,64 @@ async function mountPreferences(app){
 }
 // Mirrors DB CHECK constraints on user_preferences (chk_pref_age_bounds/range, height, weight)
 // so invalid input is caught client-side with a clear message instead of a raw 400 from Postgres.
+// A field whose "لا يهم" radio is selected is skipped entirely — it is never treated as 0 or
+// as an out-of-range value, and it can never make the range check fail.
 function validatePrefRanges(){
   const checks = [
     {min:'pr-min_age', max:'pr-max_age', lo:18, hi:100, label:'العمر'},
     {min:'pr-min_height_cm', max:'pr-max_height_cm', lo:100, hi:250, label:'الطول'},
     {min:'pr-min_weight_kg', max:'pr-max_weight_kg', lo:30, hi:300, label:'الوزن'}
   ];
+  const readOrNull = (id)=>{
+    const naRadio = document.querySelector(`input[name="${id}-mode"][value="na"]`);
+    if(naRadio && naRadio.checked) return null;
+    const v = val(id);
+    return (v===''||v===undefined) ? null : Number(v);
+  };
   for(const c of checks){
-    const minV = numOrNull(c.min), maxV = numOrNull(c.max);
+    const minV = readOrNull(c.min), maxV = readOrNull(c.max);
     if(minV!==null && (minV<c.lo || minV>c.hi)) return `الحد الأدنى لـ${c.label} يجب أن يكون بين ${c.lo} و${c.hi}.`;
     if(maxV!==null && (maxV<c.lo || maxV>c.hi)) return `الحد الأقصى لـ${c.label} يجب أن يكون بين ${c.lo} و${c.hi}.`;
     if(minV!==null && maxV!==null && minV>maxV) return `الحد الأدنى لـ${c.label} لا يمكن أن يكون أكبر من الحد الأقصى.`;
   }
   return null;
 }
-function multiChips(group, currentArr){
+// labelsObj: {value: text}. opts.noNA (default false) skips the "لا يهم" chip entirely —
+// used for screens where "no preference" isn't a real DB state (e.g. the ad-hoc Discovery
+// filter, which already treats an empty selection as "no filter" and isn't part of the
+// partner-preferences feature this chip-NA behavior was built for).
+function multiChipsFromLabels(labelsObj, currentArr, opts){
+  opts = opts || {};
   const cur = new Set(currentArr||[]);
-  return Object.entries(LABELS[group]).map(([v,t])=>`<span class="chip chip-select ${cur.has(v)?'on':''}" data-v="${v}">${t}</span>`).join('');
+  const naOn = !opts.noNA && cur.size===0;
+  const naHtml = opts.noNA ? '' : `<span class="chip chip-select chip-na ${naOn?'on':''}" data-na="1" data-v="">لا يهم</span>`;
+  return naHtml + Object.entries(labelsObj).map(([v,t])=>`<span class="chip chip-select ${cur.has(v)?'on':''}" data-v="${v}">${t}</span>`).join('');
 }
-function chipsOn(containerId){ return [...document.getElementById(containerId).querySelectorAll('.chip-select.on')].map(c=>c.dataset.v); }
+function multiChips(group, currentArr, opts){ return multiChipsFromLabels(LABELS[group], currentArr, opts); }
+function chipsOn(containerId){ return [...document.getElementById(containerId).querySelectorAll('.chip-select.on:not([data-na="1"])')].map(c=>c.dataset.v); }
+// Wires one chip group's clicks: choosing "لا يهم" clears every other chip in the group;
+// choosing any real chip turns "لا يهم" off. If the group has no NA chip (Discovery screen),
+// falls back to plain independent toggling exactly as before.
+function wireChipGroup(containerId, onAfterChange){
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  const naChip = container.querySelector('.chip-select[data-na="1"]');
+  container.querySelectorAll('.chip-select').forEach(chip=>{
+    chip.onclick = ()=>{
+      if(!naChip){ chip.classList.toggle('on'); }
+      else if(chip.dataset.na==='1'){
+        container.querySelectorAll('.chip-select').forEach(c=>c.classList.remove('on'));
+        chip.classList.add('on');
+      } else {
+        chip.classList.toggle('on');
+        naChip.classList.remove('on');
+        const anySelected = [...container.querySelectorAll('.chip-select:not([data-na="1"])')].some(c=>c.classList.contains('on'));
+        if(!anySelected) naChip.classList.add('on');
+      }
+      if(onAfterChange) onAfterChange();
+    };
+  });
+}
 
 /* =========================================================
    DISCOVERY
@@ -2584,7 +2721,7 @@ async function mountDiscovery(app){
         <div><label>إلى</label><input type="number" id="df-max_age"></div>
       </div>
       <label>المحافظة</label><select id="df-gov"><option value="">الكل</option>${S.governorates.map(g=>`<option value="${g.id}">${g.name_ar}</option>`).join('')}</select>
-      <label>الحالة الاجتماعية</label><div id="df-marital">${multiChips('marital_status',[])}</div>
+      <label>الحالة الاجتماعية</label><div id="df-marital">${multiChips('marital_status',[],{noNA:true})}</div>
       <button class="btn btn-primary btn-sm" id="df-apply" style="margin-top:14px;">تطبيق الفلاتر</button>
     </div>
     <div id="disc-results" style="margin-top:18px;">${loadingBox('جارِ البحث عن مرشحين…')}</div>
