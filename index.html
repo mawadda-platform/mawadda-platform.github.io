@@ -448,6 +448,30 @@ input:focus,select:focus,textarea:focus{
 }
 .theme-pill[data-on="dark"] .theme-pill-knob{ inset-inline-start:calc(100% - 27px); background:var(--c-primary-dark); }
 .theme-switch{ gap:10px; }
+
+/* Floating contact button — fixed on the left edge, above the mobile bottom nav */
+#fab-contact-root{ position:fixed; left:calc(16px + env(safe-area-inset-left,0px));
+  bottom:calc(var(--bottomnav-h) + env(safe-area-inset-bottom,0px) + 16px); z-index:60; }
+@media(min-width:860px){ #fab-contact-root{ bottom:calc(24px + env(safe-area-inset-bottom,0px)); } }
+.fab-contact-btn{
+  width:54px; height:54px; border-radius:50%; border:none; cursor:pointer;
+  background:var(--c-primary); color:#fff; font-size:24px; display:flex; align-items:center; justify-content:center;
+  box-shadow:var(--shadow-lg); transition:transform .15s ease;
+}
+.fab-contact-btn:hover{ transform:scale(1.06); }
+.fab-contact-btn:focus-visible{ outline:2.5px solid var(--c-accent); outline-offset:2px; }
+.fab-contact-menu{
+  position:absolute; bottom:calc(100% + 10px); left:0; min-width:196px;
+  background:var(--c-surface); border:1px solid var(--c-border); border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-lg); padding:6px; display:none; flex-direction:column; gap:2px;
+}
+.fab-contact-menu.open{ display:flex; }
+.fab-contact-menu a{
+  display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:9px;
+  font-size:14px; font-weight:700; color:var(--c-text); text-decoration:none;
+}
+.fab-contact-menu a:hover{ background:var(--c-surface-2); }
+.fab-contact-menu .fab-ico{ font-size:17px; line-height:1; }
 </style>
 </head>
 <body>
@@ -463,6 +487,25 @@ input:focus,select:focus,textarea:focus{
 <aside id="desktop-sidebar" aria-label="التنقل الرئيسي"></aside>
 <div id="app"></div>
 <div id="bottom-nav-root"></div>
+
+<div id="fab-contact-root">
+  <div class="fab-contact-menu" id="fab-contact-menu" role="menu" aria-label="خيارات التواصل">
+    <a href="https://49253231613833.sarhne.com" target="_blank" rel="noopener noreferrer" role="menuitem"><span class="fab-ico">💬</span> صرّحني</a>
+    <a href="https://wa.me/201277643652" target="_blank" rel="noopener noreferrer" role="menuitem"><span class="fab-ico">📱</span> WhatsApp</a>
+  </div>
+  <button type="button" class="fab-contact-btn" id="fab-contact-btn" aria-haspopup="true" aria-expanded="false" aria-label="تواصل معنا">💬</button>
+</div>
+<script>
+(function(){
+  var btn = document.getElementById('fab-contact-btn');
+  var menu = document.getElementById('fab-contact-menu');
+  function closeMenu(){ menu.classList.remove('open'); btn.setAttribute('aria-expanded','false'); }
+  function toggleMenu(e){ e.stopPropagation(); var open = menu.classList.toggle('open'); btn.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+  btn.addEventListener('click', toggleMenu);
+  document.addEventListener('click', function(e){ if(!menu.contains(e.target) && e.target!==btn) closeMenu(); });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeMenu(); });
+})();
+</script>
 
 <script>
 /* =========================================================
@@ -507,7 +550,8 @@ const S = {
   // Email OTP confirmation flow (replaces confirmation-link flow)
   otp: null, // { email, purpose: 'register'|'login'|'password_reset' } while the OTP screen is active
   recovery: null, // { email } once a recovery OTP has been verified; required to access /reset-password
-  noticeConfirmed: false // true only after the user explicitly ticks + confirms the platform notice; resets on full page reload by design (this is a UX flow-gate, not a stored security flag)
+  noticeConfirmed: false, // true only after the user explicitly ticks + confirms the platform notice; resets on full page reload by design (this is a UX flow-gate, not a stored security flag)
+  favoriteIds: null // Set<uuid> of the current user's saved candidate_ids (user_favorites) — lazy-loaded, reset on sign-out
 };
 
 /* =========================================================
@@ -584,11 +628,11 @@ function openLoginNoticeModal(){
 
 const LABELS = {
   gender:{male:'ذكر',female:'أنثى'},
-  body_build:{slim:'نحيف',average:'متوسط',athletic:'رياضي',heavy:'ممتلئ'},
-  skin_tone:{very_fair:'فاتح جدًا',fair:'فاتح',wheat:'قمحي',olive:'زيتوني',brown:'أسمر',dark:'داكن'},
-  hair_color:{black:'أسود',brown:'بني',blonde:'أشقر',red:'أحمر',gray_white:'رمادي/أبيض',other:'أخرى'},
-  beard:{none:'بدون لحية',trimmed:'مهذبة',full:'كثيفة'},
-  hijab:{none:'بدون حجاب',hijab:'حجاب',niqab:'نقاب'},
+  body_build:{slim:'نحيف',average:'متوسط',athletic:'رياضي',heavy:'ممتلئ',other:'أخرى — اكتب'},
+  skin_tone:{very_fair:'فاتح جدًا',fair:'فاتح',wheat:'قمحي',olive:'زيتوني',brown:'أسمر',dark:'داكن',other:'أخرى — اكتب'},
+  hair_color:{black:'أسود',brown:'بني',blonde:'أشقر',red:'أحمر',gray_white:'رمادي/أبيض',other:'أخرى — اكتب'},
+  beard:{none:'بدون لحية',trimmed:'مهذبة',full:'كثيفة',other:'أخرى — اكتب'},
+  hijab:{none:'بدون حجاب',hijab:'حجاب',niqab:'نقاب',other:'أخرى — اكتب'},
   health_status:{good:'جيدة',fair:'متوسطة',has_condition:'توجد حالة صحية'},
   disability_type:{none:'لا يوجد',physical_mobility:'حركية',visual_impairment:'بصرية',hearing_impairment:'سمعية',chronic_illness:'مرض مزمن',other:'أخرى'},
   education_level:{below_secondary:'أقل من ثانوي',secondary:'ثانوي',diploma:'دبلوم',bachelor:'بكالوريوس',master:'ماجستير',phd:'دكتوراه'},
@@ -664,8 +708,30 @@ function toast(msg, type='info'){
   setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 3200);
 }
 function friendlyError(err){
+  // Always log full details to console for debugging — never shown to the end user.
+  if(err){
+    console.error('Supabase error:', {
+      message: err.message, code: err.code, details: err.details, hint: err.hint
+    });
+  }
   const m = (err && err.message) ? err.message : String(err||'حدث خطأ غير متوقع');
   const code = err && err.code;
+  if(/governorate_id is required when city_id is set/i.test(m)) return 'تعذر تحديد المحافظة تلقائيًا — يرجى اختيار المحافظة ثم المركز مرة أخرى.';
+  if(/city_id does not belong to selected governorate_id/i.test(m)) return 'المركز المختار لا يتبع المحافظة المختارة — يرجى إعادة الاختيار.';
+  if(/city_id is required when district_id is set/i.test(m)) return 'يجب اختيار المركز أولًا قبل اختيار الحي.';
+  if(/user must be at least 18 years old/i.test(m)) return 'يجب أن يكون عمر المستخدم 18 سنة على الأقل.';
+  if(/date_of_birth is not realistic/i.test(m)) return 'تاريخ الميلاد المدخل غير واقعي، يرجى مراجعته.';
+  if(/hijab field cannot be set for gender = male|beard field cannot be set for gender = female/i.test(m)) return 'حدث تعارض في بيانات الملف الشخصي، تم تصحيحه تلقائيًا — يرجى الضغط على حفظ مرة أخرى.';
+  if(/chk_village_area_required_with_city/i.test(m)) return 'المنطقة / القرية / النجع إجباري بعد اختيار المركز.';
+  if(/chk_village_area_length/i.test(m)) return 'المنطقة / القرية / النجع يجب أن تكون بين 2 و150 حرفًا.';
+  if(/chk_disability_details_consistency/i.test(m)) return 'يرجى كتابة تفاصيل الإعاقة عند اختيار "أخرى"، أو اختيار قيمة أخرى من القائمة.';
+  if(/chk_beard_details_consistency/i.test(m)) return 'يرجى كتابة وصف اللحية عند اختيار "أخرى"، أو اختيار قيمة أخرى من القائمة.';
+  if(/chk_hijab_details_consistency/i.test(m)) return 'يرجى كتابة وصف الحجاب عند اختيار "أخرى"، أو اختيار قيمة أخرى من القائمة.';
+  if(/chk_body_build_details_consistency/i.test(m)) return 'يرجى كتابة وصف البنية الجسدية عند اختيار "أخرى"، أو اختيار قيمة أخرى من القائمة.';
+  if(/chk_skin_tone_details_consistency/i.test(m)) return 'يرجى كتابة وصف لون البشرة عند اختيار "أخرى"، أو اختيار قيمة أخرى من القائمة.';
+  if(/chk_hair_color_details_consistency/i.test(m)) return 'يرجى كتابة وصف لون الشعر عند اختيار "أخرى"، أو اختيار قيمة أخرى من القائمة.';
+  if(/chk_housing_type_details_consistency/i.test(m)) return 'يرجى كتابة وصف نوع السكن عند اختيار "أخرى"، أو اختيار قيمة أخرى من القائمة.';
+  if(/chk_full_name_length/i.test(m)) return 'الاسم يجب أن يكون بين 2 و150 حرفًا.';
   if(code==='email_not_confirmed' || /Email not confirmed|email.*not.*confirmed/i.test(m)) return 'البريد الإلكتروني غير مؤكد. أرسلنا لك كود تأكيد.';
   if(code==='invalid_credentials' || /Invalid login credentials/i.test(m)) return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
   if(code==='user_already_exists' || /already registered|user already registered/i.test(m)) return 'هذا البريد الإلكتروني مسجل بالفعل.';
@@ -926,7 +992,7 @@ function startOtpFlow(email, purpose){
 }
 async function doSignOut(){
   await sb.auth.signOut();
-  Object.assign(S, {session:null, account:null, profile:null, profileStatus:null, prefStatus:null, isAdmin:false, adminPerms:{}});
+  Object.assign(S, {session:null, account:null, profile:null, profileStatus:null, prefStatus:null, isAdmin:false, adminPerms:{}, favoriteIds:null});
   navigate('/');
 }
 
@@ -1021,6 +1087,7 @@ async function render(){
       case 'discovery': await mountDiscovery(app); break;
       case 'candidate': await mountCandidate(app, S.params.id); break;
       case 'matches': await mountMatches(app); break;
+      case 'favorites': await mountFavorites(app); break;
       case 'requests': await mountRequests(app); break;
       case 'guardians': await mountGuardians(app); break;
       case 'chat': await mountChat(app); break;
@@ -1059,7 +1126,7 @@ function renderSidebar(){
   if(!S.session){ root.innerHTML=''; return; }
   const primary=[
     ['/dashboard','🏠','الرئيسية'],['/discovery','🔎','استكشاف'],['/matches','💞','التوافق'],
-    ['/requests','✉️','طلبات الزواج']
+    ['/favorites','🔖','المفضلة'],['/requests','✉️','طلبات الزواج']
   ];
   const secondary=[['/profile','👤','ملفي'],['/preferences','⚙️','تفضيلاتي'],['/guardians','👪','الأولياء'],['/chat','💬','تواصل مع الإدارة']];
   const admin=S.isAdmin?[['/admin','🛡️','الإدارة']]:[];
@@ -1121,7 +1188,7 @@ function renderBottomNav(){
   document.body.classList.remove('has-bottomnav');
   if(!S.session){ root.innerHTML=''; return; }
   const items = [
-    ['/dashboard','🏠','الرئيسية'],['/discovery','🔎','استكشاف'],['/requests','✉️','الطلبات'],['/profile','👤','الحساب']
+    ['/dashboard','🏠','الرئيسية'],['/discovery','🔎','استكشاف'],['/favorites','🔖','المفضلة'],['/requests','✉️','الطلبات'],['/profile','👤','الحساب']
   ];
   // S.isAdmin is set from the real DB-backed is_admin() RPC (see checkSession/bootstrap), never from
   // localStorage or any client-only flag. is_admin() returns true for SUPER_ADMIN too (verified against
@@ -1181,6 +1248,21 @@ function viewLanding(){
       <div class="section-title"><div><div class="eyebrow">من مودة إلى بيت وأسرة</div><h3 class="mt0">قصص بدأت من مودة</h3></div></div>
       <div id="home-stories">${loadingBox('جارِ التحميل…')}</div>
       <div class="cta-band"><div><h3 style="color:#fff;margin-bottom:3px;">ابدأ من المكان المناسب لك</h3><p>تصفح أولًا أو أنشئ حسابك للانتقال إلى الوظائف الخاصة.</p></div><div class="hero-actions"><button class="btn btn-primary" style="background:#fff;color:var(--c-primary)" data-nav="/register">إنشاء حساب</button><button class="btn btn-outline" data-nav="/discovery">تصفح المرشحين</button></div></div>
+      <div class="section-title"><div><div class="eyebrow">تواصل مباشر</div><h3 class="mt0">لديك سؤال قبل التسجيل؟</h3></div></div>
+      <div class="grid grid-2">
+        <div class="card card-tight" style="text-align:center;">
+          <div style="font-size:30px;margin-bottom:6px;">💬</div>
+          <h4 style="margin:0 0 4px;">واتساب</h4>
+          <p class="mb0">+20 12 77643652</p>
+          <a class="btn btn-primary btn-block" style="margin-top:12px;" href="https://wa.me/201277643652" target="_blank" rel="noopener noreferrer">تواصل عبر واتساب</a>
+        </div>
+        <div class="card card-tight" style="text-align:center;">
+          <div style="font-size:30px;margin-bottom:6px;">📩</div>
+          <h4 style="margin:0 0 4px;">صرّحني</h4>
+          <p class="mb0">أرسل استفسارك أو ملاحظتك مباشرة</p>
+          <a class="btn btn-outline btn-block" style="margin-top:12px;" href="https://49253231613833.sarhne.com" target="_blank" rel="noopener noreferrer">فتح صرّحني</a>
+        </div>
+      </div>
     </section>
     ${siteFooter()}
   </main>`;
@@ -1973,11 +2055,17 @@ function renderBasicForm(panel, p){
       <div><label>الوزن (كجم)</label><input type="number" id="pf-weight_kg" value="${p.weight_kg||''}"></div>
     </div>
     <div class="row-2">
-      <div><label>البنية الجسدية</label><select id="pf-body_build"><option value="">—</option>${selOpts('body_build',p.body_build)}</select></div>
-      <div><label>لون البشرة</label><select id="pf-skin_tone"><option value="">—</option>${selOpts('skin_tone',p.skin_tone)}</select></div>
+      <div><label>البنية الجسدية</label><select id="pf-body_build"><option value="">—</option>${selOpts('body_build',p.body_build)}</select>
+        ${otherDetailsHtml('pf-body_build','وصف البنية الجسدية',p.body_build,p.body_build_other_details)}
+      </div>
+      <div><label>لون البشرة</label><select id="pf-skin_tone"><option value="">—</option>${selOpts('skin_tone',p.skin_tone)}</select>
+        ${otherDetailsHtml('pf-skin_tone','وصف لون البشرة',p.skin_tone,p.skin_tone_other_details)}
+      </div>
     </div>
     <div class="row-2">
-      <div><label>لون الشعر</label><select id="pf-hair_color"><option value="">—</option>${selOpts('hair_color',p.hair_color)}</select></div>
+      <div><label>لون الشعر</label><select id="pf-hair_color"><option value="">—</option>${selOpts('hair_color',p.hair_color)}</select>
+        ${otherDetailsHtml('pf-hair_color','وصف لون الشعر',p.hair_color,p.hair_color_other_details)}
+      </div>
       <div id="gender-specific-basic"></div>
     </div>
     <div class="row-2">
@@ -2014,15 +2102,28 @@ function renderBasicForm(panel, p){
   const gWrap = document.getElementById('gender-specific-basic');
   function renderGenderField(){
     const g = document.getElementById('pf-gender').value;
-    if(g==='male') gWrap.innerHTML = `<label>اللحية</label><select id="pf-beard"><option value="">—</option>${selOpts('beard',p.beard)}</select>`;
-    else if(g==='female') gWrap.innerHTML = `<label>الحجاب</label><select id="pf-hijab"><option value="">—</option>${selOpts('hijab',p.hijab)}</select>`;
+    if(g==='male') gWrap.innerHTML = `<label>اللحية</label><select id="pf-beard"><option value="">—</option>${selOpts('beard',p.beard)}</select>
+      <div id="beard-details-wrap" style="display:${p.beard==='other'?'block':'none'};margin-top:8px;">
+        <label>وصف اللحية</label><input type="text" id="pf-beard_other_details" maxlength="150" value="${p.beard_other_details||''}">
+      </div>`;
+    else if(g==='female') gWrap.innerHTML = `<label>الحجاب</label><select id="pf-hijab"><option value="">—</option>${selOpts('hijab',p.hijab)}</select>
+      <div id="hijab-details-wrap" style="display:${p.hijab==='other'?'block':'none'};margin-top:8px;">
+        <label>وصف الحجاب</label><input type="text" id="pf-hijab_other_details" maxlength="150" value="${p.hijab_other_details||''}">
+      </div>`;
     else gWrap.innerHTML = '';
+    const beardSel = document.getElementById('pf-beard');
+    if(beardSel) beardSel.onchange = (e)=>{ document.getElementById('beard-details-wrap').style.display = e.target.value==='other' ? 'block':'none'; };
+    const hijabSel = document.getElementById('pf-hijab');
+    if(hijabSel) hijabSel.onchange = (e)=>{ document.getElementById('hijab-details-wrap').style.display = e.target.value==='other' ? 'block':'none'; };
   }
   renderGenderField();
   document.getElementById('pf-gender').onchange = renderGenderField;
   document.getElementById('pf-disability_type').onchange = (e)=>{
     document.getElementById('disability-details-wrap').style.display = (e.target.value && e.target.value!=='none') ? 'block':'none';
   };
+  wireOtherReveal('pf-body_build','pf-body_build');
+  wireOtherReveal('pf-skin_tone','pf-skin_tone');
+  wireOtherReveal('pf-hair_color','pf-hair_color');
   // geo
   const govSel = document.getElementById('pf-governorate_id');
   const citySel = document.getElementById('pf-city_id');
@@ -2062,7 +2163,12 @@ function renderBasicForm(panel, p){
         user_id: S.session.user.id,
         full_name: val('pf-full_name'), gender: val('pf-gender')||null, date_of_birth: val('pf-date_of_birth')||null,
         height_cm: numOrNull('pf-height_cm'), weight_kg: numOrNull('pf-weight_kg'),
-        body_build: val('pf-body_build')||null, skin_tone: val('pf-skin_tone')||null, hair_color: val('pf-hair_color')||null,
+        body_build: val('pf-body_build')||null,
+        body_build_other_details: val('pf-body_build')==='other' ? (val('pf-body_build_other_details')||null) : null,
+        skin_tone: val('pf-skin_tone')||null,
+        skin_tone_other_details: val('pf-skin_tone')==='other' ? (val('pf-skin_tone_other_details')||null) : null,
+        hair_color: val('pf-hair_color')||null,
+        hair_color_other_details: val('pf-hair_color')==='other' ? (val('pf-hair_color_other_details')||null) : null,
         education_level: val('pf-education_level')||null, education_major: val('pf-education_major')||null,
         job_title: val('pf-job_title')||null, work_stability: val('pf-work_stability')||null,
         marital_status: val('pf-marital_status')||null, children_count: numOrNull('pf-children_count')||0,
@@ -2072,8 +2178,16 @@ function renderBasicForm(panel, p){
         village_area: citySel.value ? val('pf-village_area') : null,
         bio: val('pf-bio')||null
       };
-      const beardEl = document.getElementById('pf-beard'); if(beardEl) payload.beard = beardEl.value||null;
-      const hijabEl = document.getElementById('pf-hijab'); if(hijabEl) payload.hijab = hijabEl.value||null;
+      const beardEl = document.getElementById('pf-beard');
+      if(beardEl){
+        payload.beard = beardEl.value||null;
+        payload.beard_other_details = beardEl.value==='other' ? (val('pf-beard_other_details')||null) : null;
+      }
+      const hijabEl = document.getElementById('pf-hijab');
+      if(hijabEl){
+        payload.hijab = hijabEl.value||null;
+        payload.hijab_other_details = hijabEl.value==='other' ? (val('pf-hijab_other_details')||null) : null;
+      }
       const {error} = await sb.from('user_profiles').upsert(payload, {onConflict:'user_id'});
       if(error) throw error;
       toast('تم حفظ البيانات الأساسية','success');
@@ -2084,6 +2198,18 @@ function renderBasicForm(panel, p){
   };
 }
 function selOpts(group, current){ return Object.entries(LABELS[group]).map(([v,t])=>`<option value="${v}" ${current===v?'selected':''}>${t}</option>`).join(''); }
+// Reusable "أخرى — اكتب" reveal-input block for enum fields that support a free-text detail column
+// (pattern established by disability_type/disability_other_details; mirrored for beard/hijab/hair_color/
+// body_build/skin_tone/housing_type). fieldPrefix must match the input id used in the payload builder.
+function otherDetailsHtml(fieldPrefix, label, currentValue, currentDetail){
+  return `<div id="${fieldPrefix}-details-wrap" style="display:${currentValue==='other'?'block':'none'};margin-top:8px;">
+    <label>${label}</label><input type="text" id="${fieldPrefix}_other_details" maxlength="150" value="${currentDetail||''}">
+  </div>`;
+}
+function wireOtherReveal(selectId, fieldPrefix){
+  const el = document.getElementById(selectId);
+  if(el) el.onchange = (e)=>{ document.getElementById(fieldPrefix+'-details-wrap').style.display = e.target.value==='other' ? 'block':'none'; };
+}
 function val(id){ const el=document.getElementById(id); return el? el.value.trim ? el.value.trim() : el.value : ''; }
 function numOrNull(id){ const v = val(id); return (v===''||v===undefined) ? null : Number(v); }
 
@@ -2091,7 +2217,9 @@ function renderLifestyleForm(panel, l){
   panel.innerHTML = `
     <div class="row-2">
       <div><label>الحالة السكنية</label><select id="lf-housing_status"><option value="">—</option>${selOpts('housing_status',l.housing_status)}</select></div>
-      <div><label>نوع السكن</label><select id="lf-housing_type"><option value="">—</option>${selOpts('housing_type',l.housing_type)}</select></div>
+      <div><label>نوع السكن</label><select id="lf-housing_type"><option value="">—</option>${selOpts('housing_type',l.housing_type)}</select>
+        ${otherDetailsHtml('lf-housing_type','وصف نوع السكن',l.housing_type,l.housing_type_other_details)}
+      </div>
     </div>
     <div class="row-2">
       <div><label>الاستعداد للانتقال</label><select id="lf-relocation_willingness"><option value="">—</option>${selOpts('relocation_willingness',l.relocation_willingness)}</select></div>
@@ -2103,11 +2231,13 @@ function renderLifestyleForm(panel, l){
     </div>
     <button class="btn btn-primary btn-block" id="lf-save" style="margin-top:16px;">حفظ نمط الحياة</button>
   `;
+  wireOtherReveal('lf-housing_type','lf-housing_type');
   document.getElementById('lf-save').onclick = async ()=>{
     const btn = document.getElementById('lf-save'); btn.disabled=true; btn.textContent='جارٍ الحفظ…';
     try{
       const payload = { user_id: S.session.user.id };
       ['housing_status','housing_type','relocation_willingness','work_after_marriage','childbearing_preference','home_readiness'].forEach(f=>{ payload[f] = val('lf-'+f)||null; });
+      payload.housing_type_other_details = val('lf-housing_type')==='other' ? (val('lf-housing_type_other_details')||null) : null;
       const {error} = await sb.from('user_profile_lifestyle').upsert(payload, {onConflict:'user_id'});
       if(error) throw error;
       toast('تم حفظ نمط الحياة','success');
@@ -2387,6 +2517,7 @@ async function runDiscovery(){
     const authSession = await api.getAuthSession();
     // Public discovery is only for anonymous visitors. Authenticated users are never downgraded to public data.
     const res = authSession ? await api.getCandidateProfiles(filters) : await api.getPublicCandidateProfiles(filters);
+    await ensureFavoritesLoaded();
     if(!res.items || !res.items.length){
       box.innerHTML = emptyBox('🔍','لا توجد نتائج مطابقة',authSession?'أكمل ملفك الشخصي وتفضيلاتك أولًا أو جرّب تعديل الفلاتر.':'لا توجد ملفات عامة متاحة حاليًا.');
       return;
@@ -2398,6 +2529,7 @@ async function runDiscovery(){
         <button class="btn btn-outline btn-sm" id="disc-next" ${!res.has_more?'disabled':''}>التالي</button>
       </div>`;
     box.querySelectorAll('[data-cand]').forEach(el=>el.onclick=()=>navigate('/candidate/'+el.dataset.cand));
+    wireFavButtons(box);
     const prev = document.getElementById('disc-prev'); if(prev) prev.onclick=()=>{ discoveryOffset=Math.max(0,discoveryOffset-DISCOVERY_LIMIT); runDiscovery(); };
     const next = document.getElementById('disc-next'); if(next) next.onclick=()=>{ discoveryOffset+=DISCOVERY_LIMIT; runDiscovery(); };
   }catch(e){ box.innerHTML = errorBox(e); }
@@ -2411,6 +2543,7 @@ function candCard(c){
     <p class="mb0">🎓 ${L('education_level',c.education_level)}</p>
     <p class="mb0">💍 ${L('marital_status',c.marital_status)}</p>
     <div style="margin-top:8px;">${traits}</div>
+    <div style="margin-top:10px;">${favoriteButtonHtml(c.candidate_id)}</div>
   </div>`;
 }
 
@@ -2422,6 +2555,85 @@ function requireAuthGate(actionLabel='هذه الخاصية'){
     root.querySelector('#gate-close').onclick=closeModal;
   });
   return false;
+}
+
+/* =========================================================
+   FAVORITES (🔖 المفضلة) — pure save-for-later on top of the existing
+   `user_favorites` table. Deliberately separate from ❤️ marriage_requests:
+   no notification, no admin review cycle, just a private bookmark the
+   user manages themselves. RLS on user_favorites already enforces
+   own-rows-only / no-self / no-duplicate; this layer never bypasses it.
+========================================================= */
+// Lazily loads the current user's favorited candidate_ids into a Set, cached on S.favoriteIds.
+// Guests get an empty Set (RLS would reject them anyway) so button rendering never has to null-check.
+async function ensureFavoritesLoaded(){
+  if(!S.session){ S.favoriteIds = new Set(); return; }
+  if(S.favoriteIds) return;
+  try{
+    const {data, error} = await sb.from('user_favorites').select('candidate_id').eq('user_id', S.session.user.id);
+    if(error) throw error;
+    S.favoriteIds = new Set((data||[]).map(r=>r.candidate_id));
+  }catch(e){ S.favoriteIds = new Set(); }
+}
+function favoriteButtonHtml(candidateId){
+  return `<button type="button" class="btn btn-outline btn-sm fav-btn" data-fav="${candidateId}">🔖 حفظ للمفضلة</button>`;
+}
+function applyFavButtonState(btn, candidateId){
+  const on = !!(S.favoriteIds && S.favoriteIds.has(candidateId));
+  btn.className = 'btn btn-sm fav-btn ' + (on ? 'btn-primary' : 'btn-outline');
+  btn.textContent = on ? '✅ في المفضلة' : '🔖 حفظ للمفضلة';
+}
+// Wires every .fav-btn under `root`. Pass onToggle(candidateId, isNowFavorited) to react to a change
+// (e.g. remove the card from a "My Favorites" list once it's un-favorited).
+function wireFavButtons(root, onToggle){
+  root.querySelectorAll('.fav-btn').forEach(btn=>{
+    const candidateId = btn.dataset.fav;
+    applyFavButtonState(btn, candidateId);
+    btn.onclick = async (e)=>{
+      e.stopPropagation(); // cards themselves are clickable (data-cand) — never trigger navigation
+      if(!requireAuthGate('حفظ المرشحين في المفضلة')) return;
+      if(candidateId === S.session.user.id){ toast('لا يمكنك إضافة نفسك للمفضلة','error'); return; }
+      const wasOn = S.favoriteIds.has(candidateId);
+      btn.disabled = true;
+      try{
+        if(wasOn){
+          const {error} = await sb.from('user_favorites').delete().eq('user_id', S.session.user.id).eq('candidate_id', candidateId);
+          if(error) throw error;
+          S.favoriteIds.delete(candidateId);
+          toast('تمت الإزالة من المفضلة','success');
+        } else {
+          const {error} = await sb.from('user_favorites').insert({user_id:S.session.user.id, candidate_id:candidateId});
+          if(error) throw error;
+          S.favoriteIds.add(candidateId);
+          toast('تمت الإضافة إلى المفضلة','success');
+        }
+        applyFavButtonState(btn, candidateId);
+        if(onToggle) onToggle(candidateId, S.favoriteIds.has(candidateId));
+      }catch(ex){ toast(friendlyError(ex),'error'); }
+      finally{ btn.disabled=false; }
+    };
+  });
+}
+async function mountFavorites(app){
+  if(!requireAuthGate('صفحة المفضلة')){ app.innerHTML = ''; return; }
+  app.innerHTML = `<div class="container"><h2>🔖 المفضلة</h2><div id="fav-results">${loadingBox('جارِ تحميل المفضلة…')}</div></div>`;
+  const box = document.getElementById('fav-results');
+  try{
+    await ensureFavoritesLoaded();
+    const ids = Array.from(S.favoriteIds);
+    if(!ids.length){ box.innerHTML = emptyBox('🔖','لا توجد عناصر محفوظة بعد','احفظ أي مرشح من صفحة الاستكشاف أو ملفه الشخصي للرجوع إليه لاحقًا.'); return; }
+    const results = await Promise.all(ids.map(id=>api.getCandidateById(id).catch(()=>null)));
+    const cards = results.map((c,i)=> c ? candCard(c) : `<div class="cand-card" data-fav-missing="${ids[i]}"><p class="mb0 muted">هذا الملف لم يعد متاحًا حاليًا</p>${favoriteButtonHtml(ids[i])}</div>`).join('');
+    box.innerHTML = `<div class="grid grid-3">${cards}</div>`;
+    box.querySelectorAll('[data-cand]').forEach(el=>el.onclick=()=>navigate('/candidate/'+el.dataset.cand));
+    wireFavButtons(box, (id, isNowFav)=>{
+      if(!isNowFav){
+        const card = box.querySelector(`[data-cand="${id}"]`) || box.querySelector(`[data-fav-missing="${id}"]`);
+        if(card) card.remove();
+        if(!box.querySelector('.cand-card')) box.innerHTML = emptyBox('🔖','لا توجد عناصر محفوظة بعد','احفظ أي مرشح من صفحة الاستكشاف أو ملفه الشخصي للرجوع إليه لاحقًا.');
+      }
+    });
+  }catch(e){ box.innerHTML = errorBox(e); }
 }
 
 /* =========================================================
@@ -2443,9 +2655,11 @@ async function mountCandidate(app, id){
       <div class="profile-section"><h3>التعليم والعمل</h3><p><strong>استقرار العمل:</strong> ${L('work_stability',c.work_stability)}</p></div>
       <div class="profile-section"><h3>السكن ونمط الحياة</h3><p><strong>الحالة السكنية:</strong> ${L('housing_status',c.housing_status)}</p><p><strong>الاستعداد للانتقال:</strong> ${L('relocation_willingness',c.relocation_willingness)}</p></div>
       <div class="profile-section"><h3>الصفات</h3><div>${traits}</div></div>
-      <div class="gate-box" style="margin-top:14px;"><strong>التواصل يتم عبر طلب الزواج</strong><p>لا تُعرض بيانات الاتصال المباشر من خلال هذا الملف.</p><div class="flex gap8" style="justify-content:center;flex-wrap:wrap;"><button class="btn btn-primary" id="send-request">طلب الزواج</button><button class="btn btn-outline" id="report-user">إبلاغ عن هذا الملف</button></div></div>
+      <div class="gate-box" style="margin-top:14px;"><strong>التواصل يتم عبر طلب الزواج</strong><p>لا تُعرض بيانات الاتصال المباشر من خلال هذا الملف.</p><div class="flex gap8" style="justify-content:center;flex-wrap:wrap;"><button class="btn btn-primary" id="send-request">طلب الزواج</button>${favoriteButtonHtml(id)}<button class="btn btn-outline" id="report-user">إبلاغ عن هذا الملف</button></div></div>
       </div></div>`;
     document.querySelector('[data-back]').onclick=()=>navigate('/discovery');
+    await ensureFavoritesLoaded();
+    wireFavButtons(app);
     document.getElementById('send-request').onclick=()=>{
       if(!requireAuthGate('إرسال طلب الزواج')) return;
       confirmModal('إرسال طلب زواج','سيتم إرسال طلبك لمراجعة الإدارة أولًا قبل وصوله للطرف الآخر. هل تريد المتابعة؟','إرسال',async()=>{
@@ -2917,7 +3131,7 @@ async function bootAfterAuth(session){
 let authListenerFired = false;
 sb.auth.onAuthStateChange(async (event, session)=>{
   if(event==='SIGNED_OUT'){
-    Object.assign(S, {session:null, account:null, profile:null, profileStatus:null, prefStatus:null, isAdmin:false, adminPerms:{}});
+    Object.assign(S, {session:null, account:null, profile:null, profileStatus:null, prefStatus:null, isAdmin:false, adminPerms:{}, favoriteIds:null});
     if(S.booted) render();
     return;
   }
